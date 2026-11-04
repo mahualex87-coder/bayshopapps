@@ -18,9 +18,31 @@ export function translate(language: Language, key: string, params: TranslationPa
   const message = entry?.[language] || entry?.ro || key;
   return message.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (placeholder, name: string) => Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : placeholder);
 }
+/** ICU formatter construction is the dominant cost of list rendering on Hermes.
+ * The app uses a handful of option shapes per locale, so instances are reused;
+ * the cache is bounded in case a caller passes variable options. */
+const FORMATTER_CACHE_LIMIT = 64;
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+function cachedFormatter<T>(cache: Map<string, T>, key: string, create: () => T): T {
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const created = create();
+  if (cache.size >= FORMATTER_CACHE_LIMIT) cache.clear();
+  cache.set(key, created);
+  return created;
+}
+function numberFormatter(language: Language, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const locale = languageLocales[language];
+  return cachedFormatter(numberFormatters, `${locale}|${JSON.stringify(options)}`, () => new Intl.NumberFormat(locale, options));
+}
+function dateFormatter(language: Language, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const locale = languageLocales[language];
+  return cachedFormatter(dateFormatters, `${locale}|${JSON.stringify(options)}`, () => new Intl.DateTimeFormat(locale, options));
+}
 export function formatNumber(language: Language, value: number, options: Intl.NumberFormatOptions = {}): string {
   if (!Number.isFinite(value)) return translate(language, 'common.unavailable');
-  return new Intl.NumberFormat(languageLocales[language], options).format(value);
+  return numberFormatter(language, options).format(value);
 }
 /** Hermes can provide NumberFormat/DateTimeFormat without PluralRules. These
  * cardinal rules cover the app's three locales (Unicode CLDR plurals.xml). */
@@ -74,13 +96,13 @@ export function formatDate(language: Language, value: string | null): string | n
   if (!value) return null;
   const parsed = parseDisplayDate(value);
   if (!parsed) return value;
-  return new Intl.DateTimeFormat(languageLocales[language], { day: 'numeric', month: 'short', year: 'numeric', ...(parsed.wallClock ? { timeZone: 'UTC' } : {}) }).format(parsed.date);
+  return dateFormatter(language, { day: 'numeric', month: 'short', year: 'numeric', ...(parsed.wallClock ? { timeZone: 'UTC' } : {}) }).format(parsed.date);
 }
 export function formatTime(language: Language, value: number | Date | string | null): string | null {
   if (value === null) return null;
   const parsed = typeof value === 'string' ? parseDisplayDate(value) : { date: value instanceof Date ? value : new Date(value), wallClock: false };
   if (!parsed || !Number.isFinite(parsed.date.getTime())) return typeof value === 'string' ? value : null;
-  return new Intl.DateTimeFormat(languageLocales[language], { hour: '2-digit', minute: '2-digit', ...(parsed.wallClock ? { timeZone: 'UTC' } : {}) }).format(parsed.date);
+  return dateFormatter(language, { hour: '2-digit', minute: '2-digit', ...(parsed.wallClock ? { timeZone: 'UTC' } : {}) }).format(parsed.date);
 }
 export function formatUpdatedAt(language: Language, value: number | null, now = Date.now()): string {
   if (value === null || !Number.isFinite(value)) return translate(language, 'common.dataFromAccount');
@@ -89,7 +111,7 @@ export function formatUpdatedAt(language: Language, value: number | null, now = 
   const time = formatTime(language, date) || '';
   const sameDay = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
   if (sameDay) return translate(language, 'common.updatedAt', { time });
-  return translate(language, 'common.updatedOn', { time, date: new Intl.DateTimeFormat(languageLocales[language], { day: 'numeric', month: 'short', year: 'numeric' }).format(date) });
+  return translate(language, 'common.updatedOn', { time, date: dateFormatter(language, { day: 'numeric', month: 'short', year: 'numeric' }).format(date) });
 }
 
 export type LanguageStorage = { read(): Promise<string | null>; write(language: Language): Promise<void> };

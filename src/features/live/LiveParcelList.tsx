@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { LiveParcel, LiveParcelStage } from '@/api/contracts';
 import type { ParcelPageState, ParcelQuery } from '@/api/parcel-pagination';
 import { countryDisplayName } from '@/domain/presentation-labels';
@@ -23,7 +23,7 @@ const knownFilterStatuses = new Set([...knownParcelStatuses, 'declared', 'undecl
 type ParcelSelection = { selected: boolean; disabled: boolean; reason: string | null; onToggle: () => void };
 type ShipmentSelection = { stock: LiveResource<LiveParcel[]>; canCreate: boolean; onCreate: (ids: string[]) => void };
 
-export function ParcelCard({ parcel, onOpen, selection }: { parcel: LiveParcel; onOpen?: (parcel: LiveParcel) => void; selection?: ParcelSelection }) {
+export const ParcelCard = memo(function ParcelCard({ parcel, onOpen, selection }: { parcel: LiveParcel; onOpen?: (parcel: LiveParcel) => void; selection?: ParcelSelection }) {
   const { colors, s } = useUi(); const styles = useThemeStyles(makeStyles);
   const { t, formatDate, formatNumber, language } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -76,7 +76,15 @@ export function ParcelCard({ parcel, onOpen, selection }: { parcel: LiveParcel; 
       {selection.reason && !(parcel.stage === 'warehouse' && parcel.declared === false && selection.reason === 'packing.declarationRequired') && <Text style={[s.small, styles.selectionReason]}>{t(selection.reason)}</Text>}
     </View>}
   </View>;
-}
+});
+
+/** Rows receive primitives only, so a store emit that changes nothing visible
+ * for a parcel does not re-render its card (FlatList re-renders every cell
+ * whenever renderItem changes identity). */
+const ParcelRow = memo(function ParcelRow({ parcel, onOpen, style, selectable, selected, disabled, reason, onToggle }: { parcel: LiveParcel; onOpen?: (parcel: LiveParcel) => void; style: StyleProp<ViewStyle>; selectable: boolean; selected: boolean; disabled: boolean; reason: string | null; onToggle: (parcel: LiveParcel) => void }) {
+  const selection = useMemo<ParcelSelection | undefined>(() => selectable ? { selected, disabled, reason, onToggle: () => onToggle(parcel) } : undefined, [selectable, selected, disabled, reason, onToggle, parcel]);
+  return <View style={style}><ParcelCard parcel={parcel} onOpen={onOpen} selection={selection} /></View>;
+});
 
 export function LiveParcelList({ stage, page, onRefresh, onQueryChange, onPageChange, onOpen, onCreate, shipment }: { stage: LiveParcelStage; page: ParcelPageState; onRefresh: () => void; onQueryChange: (query: Partial<ParcelQuery>) => void; onPageChange: (page: number) => void; onCreate?: () => void; onOpen?: (parcel: LiveParcel) => void; shipment?: ShipmentSelection }) {
   const { t, countt, formatNumber, language } = useI18n();
@@ -142,12 +150,13 @@ export function LiveParcelList({ stage, page, onRefresh, onQueryChange, onPageCh
     {page.items !== null && <View style={{ gap: 3 }}><Text accessibilityLiveRegion="polite" style={s.small}>{page.total === null ? countt('live.parcel.count', page.items.length) : countt('live.pagination.shownOf', page.items.length, { total: formatNumber(page.total) })}</Text><Text style={s.small}>{countt('live.pagination.loaded', page.loaded)}{page.overallTotal === null ? '' : ` · ${t('live.pagination.accountTotal', { total: formatNumber(page.overallTotal) })}`}</Text></View>}
     {showPagination && pagination}
   </View>;
+  const selectable = !!shipment;
   const renderItem = useCallback(({ item }: { item: LiveParcel }) => {
     const selected = selection.ids.includes(item.id);
-    const reason = shipment ? warehouseSelectionIssue(item, selection.storageId) : null;
-    return <View style={styles.listItem}><ParcelCard parcel={item} onOpen={onOpen} selection={shipment ? { selected, disabled: selectionBusy || (!selected && !!reason), reason, onToggle: () => toggleParcel(item) } : undefined} /></View>;
-  }, [onOpen, styles.listItem, selection.ids, selection.storageId, shipment, selectionBusy, toggleParcel]);
-  return <View style={s.flex}><FlatList ref={list} accessibilityLabel={t(`stage.${stage}`)} style={s.flex} contentContainerStyle={styles.listContent} data={page.items || []} extraData={language} keyExtractor={parcel => `${parcel.stage}:${parcel.storageId || ''}:${parcel.id}`} renderItem={renderItem} ListHeaderComponent={header} ItemSeparatorComponent={ItemSeparator} ListFooterComponent={showPagination ? <View style={[s.column, styles.listFooter]}>{pagination}</View> : undefined} ListEmptyComponent={page.items !== null && !page.loading && !page.error ? <View style={styles.listItem}><EmptyState icon={filtered ? 'search-outline' : icons[stage]} title={t(filtered ? 'live.noResults' : 'live.empty')} text={t(filtered ? 'live.searchHint' : `stage.${stage}.empty`)} /></View> : undefined} initialNumToRender={6} maxToRenderPerBatch={6} windowSize={5} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} onRefresh={onRefresh} refreshing={page.loading && page.items !== null} />
+    const reason = selectable ? warehouseSelectionIssue(item, selection.storageId) : null;
+    return <ParcelRow parcel={item} onOpen={onOpen} style={styles.listItem} selectable={selectable} selected={selected} disabled={selectionBusy || (!selected && !!reason)} reason={reason} onToggle={toggleParcel} />;
+  }, [onOpen, styles.listItem, selection.ids, selection.storageId, selectable, selectionBusy, toggleParcel]);
+  return <View style={s.flex}><FlatList ref={list} accessibilityLabel={t(`stage.${stage}`)} style={s.flex} contentContainerStyle={styles.listContent} data={page.items || []} extraData={language} keyExtractor={parcelKey} renderItem={renderItem} ListHeaderComponent={header} ItemSeparatorComponent={ItemSeparator} ListFooterComponent={showPagination ? <View style={[s.column, styles.listFooter]}>{pagination}</View> : undefined} ListEmptyComponent={page.items !== null && !page.loading && !page.error ? <View style={styles.listItem}><EmptyState icon={filtered ? 'search-outline' : icons[stage]} title={t(filtered ? 'live.noResults' : 'live.empty')} text={t(filtered ? 'live.searchHint' : `stage.${stage}.empty`)} /></View> : undefined} initialNumToRender={6} maxToRenderPerBatch={6} windowSize={5} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} onRefresh={onRefresh} refreshing={page.loading && page.items !== null} />
     {shipment && <GlassSurface style={styles.selectionBar}>
       <View style={styles.selectionHeading}><Text accessibilityLiveRegion="polite" style={[s.body, { flex: 1 }]}>{countt('warehouseSelection.count', selection.ids.length)}</Text>{selection.ids.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t('warehouseSelection.clear')} onPress={() => setSelectedIds([])} style={({ pressed }) => [styles.clearSelection, pressed && s.pressed]}><Ionicons accessible={false} aria-hidden name="close-circle-outline" size={22} color={colors.muted} /></Pressable>}</View>
       {selection.invalid && <Text accessibilityRole="alert" style={[s.small, { color: colors.error }]}>{t('packing.selectionChanged')}</Text>}
@@ -156,6 +165,7 @@ export function LiveParcelList({ stage, page, onRefresh, onQueryChange, onPageCh
   </View>;
 }
 function ItemSeparator() { return <View style={{ height: 12 }} />; }
+const parcelKey = (parcel: LiveParcel) => `${parcel.stage}:${parcel.storageId || ''}:${parcel.id}`;
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   selectedCard: { borderColor: colors.accent }, selectionArea: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

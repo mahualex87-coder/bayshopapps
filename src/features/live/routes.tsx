@@ -3,7 +3,7 @@ import { AccountPickupQrAction } from '@/features/accountops/AccountPickupQr';
 import type { ThemeColors } from '@/theme/palette';
 import { useThemeStyles } from '@/theme/context';
 import { router, useIsFocused, type Href } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLiveAccount } from '@/api/context';
@@ -27,17 +27,24 @@ export function LiveParcelsRoute({ stage }: { stage: LiveParcelStage }) {
   const page = parcelPages[stage];
   const pending = focused && authenticated && (page.loading || (page.items === null && page.error === null && page.updatedAt === null));
   usePageLoad(pending, pending && page.items === null);
-  const displayPage = { ...page, countries: parcelFilterCountries(stage, page.countries, resources.addresses.data || []) };
+  const addresses = resources.addresses.data;
+  const displayPage = useMemo(() => ({ ...page, countries: parcelFilterCountries(stage, page.countries, addresses || []) }), [stage, page, addresses]);
   useEffect(() => { if (focused && page.items === null && !page.loading && !page.error) void refresh([stage]); }, [focused, stage, page.items, page.loading, page.error, refresh]);
   const onQueryChange = useCallback((query: Partial<ParcelQuery>) => setParcelQuery(stage, query), [stage, setParcelQuery]);
   const onPageChange = useCallback((number: number) => loadParcelPage(stage, number), [stage, loadParcelPage]);
-  const openParcel = (parcel: LiveParcel) => {
+  const onRefresh = useCallback(() => { void refresh([stage]); }, [refresh, stage]);
+  // Stable identities keep FlatList rows from re-rendering on unrelated store emits.
+  const openParcel = useCallback((parcel: LiveParcel) => {
     if (stage === 'waiting') router.push({ pathname: '/incoming/[id]', params: { id: parcel.id } });
     else if (stage === 'warehouse') router.push({ pathname: '/warehouse/[id]', params: { id: parcel.id } });
     else router.push({ pathname: '/shipment/[id]', params: { id: parcel.id, section: stage === 'received' ? 'received' : 'shipments' } });
-  };
-  return <LiveParcelList key={`${resources.profile.data?.id || 'anonymous'}:${stage}`} shipment={stage === 'warehouse' ? { stock: resources.warehouse, canCreate: canMutate && !mutationPending, onCreate: ids => router.push({ pathname: '/shipment/new', params: { ids: ids.join(',') } }) } : undefined} stage={stage} page={displayPage} onQueryChange={onQueryChange} onPageChange={onPageChange} onRefresh={() => { void refresh([stage]); }} onOpen={openParcel} onCreate={stage === 'waiting' ? () => router.push('/incoming/new') : undefined} />;
+  }, [stage]);
+  const onCreateShipment = useCallback((ids: string[]) => router.push({ pathname: '/shipment/new', params: { ids: ids.join(',') } }), []);
+  const canCreateShipment = canMutate && !mutationPending;
+  const shipment = useMemo(() => stage === 'warehouse' ? { stock: resources.warehouse, canCreate: canCreateShipment, onCreate: onCreateShipment } : undefined, [stage, resources.warehouse, canCreateShipment, onCreateShipment]);
+  return <LiveParcelList key={`${resources.profile.data?.id || 'anonymous'}:${stage}`} shipment={shipment} stage={stage} page={displayPage} onQueryChange={onQueryChange} onPageChange={onPageChange} onRefresh={onRefresh} onOpen={openParcel} onCreate={stage === 'waiting' ? openNewIncoming : undefined} />;
 }
+const openNewIncoming = () => router.push('/incoming/new');
 export function LiveAddressesRoute() {
   const { resources, refresh } = useLiveAccount();
   return <LiveAddresses resource={resources.addresses} onRefresh={() => { void refresh(['addresses']); }} />;
