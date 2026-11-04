@@ -45,7 +45,7 @@ function harness(attempts = [], activeKey = null, platform = 'ios') {
   const imports = {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
     'react-native': { ActivityIndicator: 'ActivityIndicator', Image: 'Image', Platform: { OS: platform }, Pressable: 'Pressable', Text: 'Text', View: 'View' },
-    '@expo/vector-icons': { Ionicons: 'Icon' },
+    '@expo/vector-icons/Ionicons': { default: 'Icon', __esModule: true },
     'expo-router': { router: { push: path => calls.push(['navigate', path]) }, useFocusEffect() {} },
     'expo-clipboard': {},
     '@/api/context': { useLiveAccount: () => ({ canMutate: true, authenticated: true, accountId: 'synthetic-account' }) },
