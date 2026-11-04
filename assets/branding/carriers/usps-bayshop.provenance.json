@@ -1,0 +1,27 @@
+{
+  "brand": "USPS",
+  "file": "usps-bayshop.png",
+  "sourceUrl": "https://bayshop.com/upload/shippers/16.png",
+  "sourceEvidence": {
+    "file": "work/api-auth-docs/legacy-source.txt",
+    "lines": [
+      7140,
+      7146
+    ],
+    "endpoint": "POST /api/calculator",
+    "serverTitle": "USPS Priority Mail"
+  },
+  "equivalentPublicSources": [
+    "https://bayshop.com/upload/shippers/15.png",
+    "https://bayshop.com/upload/shippers/38.png"
+  ],
+  "retrievedAt": "2026-11-02",
+  "httpStatus": 200,
+  "contentType": "image/png",
+  "visuallyVerified": true,
+  "visualDescription": "USPS white eagle emblem on blue field",
+  "originalUnmodified": true,
+  "sha256": "4fe54cbdbf0650bc7ec4d1fac6e24e3746ffcbcffdf2c30bd3e9e0cefbf19f71",
+  "width": 50,
+  "height": 50
+}

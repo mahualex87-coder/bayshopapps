@@ -1,0 +1,18 @@
+export const messagesMedia = {
+  'media.previousPage': { ro: 'Pagina precedentă', ru: 'Предыдущая страница', en: 'Previous page' },
+  'media.nextPage': { ro: 'Pagina următoare', ru: 'Следующая страница', en: 'Next page' },
+  'media.close': { ro: 'Închide vizualizarea', ru: 'Закрыть просмотр', en: 'Close viewer' },
+  'media.previous': { ro: 'Fotografia precedentă', ru: 'Предыдущее фото', en: 'Previous photo' },
+  'media.next': { ro: 'Fotografia următoare', ru: 'Следующее фото', en: 'Next photo' },
+  'media.position': { ro: '{current} din {total}', ru: '{current} из {total}', en: '{current} of {total}' },
+  'media.zoomIn': { ro: 'Mărește', ru: 'Увеличить', en: 'Zoom in' },
+  'media.zoomOut': { ro: 'Micșorează', ru: 'Уменьшить', en: 'Zoom out' },
+  'media.reset': { ro: 'Încadrează', ru: 'По размеру', en: 'Fit to screen' },
+  'media.loading': { ro: 'Se încarcă…', ru: 'Загрузка…', en: 'Loading…' },
+  'media.error': { ro: 'Fișierul nu a putut fi încărcat. Verifică conexiunea și încearcă din nou.', ru: 'Не удалось загрузить файл. Проверьте подключение и повторите попытку.', en: 'The file could not be loaded. Check your connection and try again.' },
+  'media.retry': { ro: 'Încearcă din nou', ru: 'Повторить', en: 'Try again' },
+  'media.unsupported': { ro: 'Serverul nu a furnizat o imagine sau un document PDF care poate fi afișat.', ru: 'Сервер не предоставил изображение или PDF для просмотра.', en: 'The server did not provide a viewable image or PDF document.' },
+  'media.hint': { ro: 'Depărtează două degete pentru a mări. La încadrare, glisează lateral între poze sau în jos pentru a închide.', ru: 'Разведите два пальца для увеличения. Без увеличения листайте вбок, а для закрытия — вниз.', en: 'Pinch to zoom. When fitted, swipe sideways between photos or down to close.' },
+  'media.pdfPage': { ro: 'Pagina {current} din {total}', ru: 'Страница {current} из {total}', en: 'Page {current} of {total}' },
+  'media.linkNotOpened': { ro: 'Legătura din document nu a fost deschisă. Poți continua să citești aici.', ru: 'Ссылка в документе не открыта. Продолжайте чтение здесь.', en: 'The document link was not opened. You can continue reading here.' },
+};

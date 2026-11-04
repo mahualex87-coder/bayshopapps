@@ -1,0 +1,9 @@
+export const messagesOnboarding: Record<string, { ro: string; ru: string; en: string }> = {
+  'onboarding.title': { ro: 'Țara și limba ta', ru: 'Ваша страна и язык', en: 'Your country and language' },
+  'onboarding.hint': { ro: 'Verifică țara propusă din setările telefonului. Limbile disponibile sunt stabilite de BayShop pentru fiecare țară.', ru: 'Проверьте страну, предложенную по настройкам телефона. Доступные языки определяет BayShop для каждой страны.', en: 'Check the country suggested by your phone settings. BayShop determines the available languages for each country.' },
+  'onboarding.loading': { ro: 'Se încarcă țările și limbile…', ru: 'Загружаем страны и языки…', en: 'Loading countries and languages…' },
+  'onboarding.unavailable': { ro: 'Nu am putut încărca țările pentru înregistrare. Încearcă din nou mai târziu. Autentificarea cu e-mail și parolă rămâne disponibilă.', ru: 'Не удалось загрузить страны для регистрации. Попробуйте позже. Вход по электронной почте и паролю по-прежнему доступен.', en: 'Registration countries could not be loaded. Try again later. Email and password sign-in is still available.' },
+  'onboarding.languageUnsupported': { ro: 'Această limbă nu este încă disponibilă în versiunea instalată a aplicației. Alege altă limbă disponibilă pentru țara ta.', ru: 'Этот язык пока недоступен в установленной версии приложения. Выберите другой доступный язык для вашей страны.', en: 'This language is not yet available in the installed app version. Choose another available language for your country.' },
+  'onboarding.continue': { ro: 'Confirmă țara și limba', ru: 'Подтвердить страну и язык', en: 'Confirm country and language' },
+  'onboarding.required': { ro: 'Alege și confirmă țara și limba înainte de înregistrare.', ru: 'Выберите и подтвердите страну и язык перед регистрацией.', en: 'Choose and confirm your country and language before registering.' },
+};

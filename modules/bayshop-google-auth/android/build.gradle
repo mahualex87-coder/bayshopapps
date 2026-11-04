@@ -1,0 +1,19 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.bayshop.googleauth'
+version = '0.1.0'
+
+android {
+  namespace 'com.bayshop.googleauth'
+  defaultConfig { versionCode 1; versionName '0.1.0' }
+}
+
+dependencies {
+  // Stable, pinned official Google/AndroidX artifacts; no client secret or Firebase SDK.
+  implementation 'androidx.credentials:credentials:1.6.0'
+  implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+  implementation 'com.google.android.libraries.identity.googleid:googleid:1.2.0'
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@bayshop/google-auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Android Credential Manager bridge; no tokens are persisted",
+  "peerDependencies": { "expo": "^58.0.0" }
+}

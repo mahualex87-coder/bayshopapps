@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'com.bayshop.wallet'
+version = '0.1.0'
+android {
+  namespace 'com.bayshop.wallet'
+  defaultConfig { versionCode 1; versionName '0.1.0' }
+}
+dependencies {
+  // Activity Result APIs used directly by this module must be on its compile classpath.
+  implementation 'androidx.activity:activity:1.13.0'
+  implementation 'com.google.android.gms:play-services-wallet:20.0.0'
+}

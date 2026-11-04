@@ -1,0 +1,18 @@
+export const messagesPush: Record<string, { ro: string; ru: string; en: string }> = {
+  'push.title': { ro: 'Notificări pe acest dispozitiv', ru: 'Уведомления на этом устройстве', en: 'Notifications on this device' },
+  'push.accountOff': { ro: 'Pentru acest cont, „Notificări push” este dezactivat. Activează această opțiune mai sus și apasă „{button}” pentru a primi notificări pe dispozitivele conectate.', ru: 'В вашем аккаунте выключены «Push-уведомления». Включите их выше и нажмите «{button}», чтобы получать уведомления на подключённых устройствах.', en: '“Push notifications” is off for your account. Turn it on above and tap “{button}” to receive updates on your connected devices.' },
+  'push.off': { ro: 'Notificările pentru acest cont sunt dezactivate pe acest dispozitiv.', ru: 'Уведомления этого аккаунта выключены на этом устройстве.', en: 'Notifications for this account are off on this device.' },
+  'push.on': { ro: 'Acest dispozitiv este conectat la notificările contului tău.', ru: 'Это устройство подключено к уведомлениям вашего аккаунта.', en: 'This device is connected to notifications for your account.' },
+  'push.busy': { ro: 'Se verifică setările notificărilor…', ru: 'Проверяем настройки уведомлений…', en: 'Checking notification settings…' },
+  'push.enable': { ro: 'Activează pe acest dispozitiv', ru: 'Включить на этом устройстве', en: 'Enable on this device' },
+  'push.disable': { ro: 'Dezactivează pe acest dispozitiv', ru: 'Выключить на этом устройстве', en: 'Disable on this device' },
+  'push.retry': { ro: 'Încearcă din nou', ru: 'Попробовать снова', en: 'Try again' },
+  'push.blocked': { ro: 'Pentru a primi notificări, permite-le în setările dispozitivului.', ru: 'Разрешите уведомления в настройках устройства, чтобы получать их.', en: 'Allow notifications in device settings to receive them.' },
+  'push.settings': { ro: 'Deschide setările dispozitivului', ru: 'Открыть настройки устройства', en: 'Open device settings' },
+  'push.unavailable': { ro: 'Notificările nu sunt disponibile în această versiune a aplicației.', ru: 'Уведомления недоступны в этой версии приложения.', en: 'Notifications are unavailable in this version of the app.' },
+  'push.serverUpdate': { ro: 'Serviciul de notificări BayShop nu este încă disponibil pentru această aplicație.', ru: 'Сервис уведомлений BayShop пока недоступен для этого приложения.', en: 'The BayShop notification service is not yet available for this app.' },
+  'push.cleanupFailed': { ro: 'Dezactivarea nu s-a terminat. Verifică conexiunea și încearcă din nou.', ru: 'Не удалось завершить отключение. Проверьте соединение и попробуйте снова.', en: 'Disabling notifications did not finish. Check your connection and try again.' },
+  'push.failed': { ro: 'Setările notificărilor nu au putut fi confirmate. Încearcă din nou.', ru: 'Не удалось подтвердить настройки уведомлений. Попробуйте снова.', en: 'Notification settings could not be confirmed. Try again.' },
+  'push.open': { ro: 'Deschide notificarea', ru: 'Открыть уведомление', en: 'Open notification' },
+  'push.dismiss': { ro: 'Închide notificarea', ru: 'Закрыть уведомление', en: 'Dismiss notification' },
+};

@@ -1,0 +1,1 @@
+{"name":"@bayshop/wallet","version":"0.1.0","private":true,"description":"Local encrypted EuPlatesc payment token bridge","peerDependencies":{"expo":"^58.0.0"}}

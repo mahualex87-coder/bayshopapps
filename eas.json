@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 27.2.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "node": "24.19.0",
+      "environment": "preview",
+      "developmentClient": false,
+      "distribution": "internal",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk",
+        "image": "auto"
+      },
+      "ios": {
+        "buildConfiguration": "Release",
+        "simulator": false,
+        "image": "auto"
+      },
+      "env": {
+        "BAYSHOP_REQUIRE_PUSH": "1"
+      }
+    },
+    "simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "production": {
+      "node": "24.19.0",
+      "autoIncrement": true
+    }
+  }
+}

@@ -17,6 +17,11 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.keystore
+credentials.json
+*.ipa
+*.apk
+*.aab
 
 # Metro
 .metro-health-check*
@@ -41,3 +46,8 @@ example
 # generated native folders
 /ios
 /android
+
+# Firebase mobile client configuration is supplied through build environment files.
+google-services*.json
+GoogleService-Info*.plist
+credentials/

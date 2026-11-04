@@ -1,0 +1,16 @@
+export const messagesSupportChat: Record<string, { ro: string; ru: string; en: string }> = {
+  'supportChat.close': { ro: 'Închide', ru: 'Закрыть', en: 'Close' },
+  'support.identityUnavailable': { ro: 'Chatul nu este disponibil momentan pentru acest cont.', ru: 'Чат временно недоступен для этого аккаунта.', en: 'Chat is currently unavailable for this account.' },
+  'supportChat.signInRequired': { ro: 'Autentifică-te pentru a deschide conversațiile tale cu suportul BayShop.', ru: 'Войдите в аккаунт, чтобы открыть ваши переписки с поддержкой BayShop.', en: 'Sign in to open your conversations with BayShop support.' },
+  'supportChat.signIn': { ro: 'Autentificare', ru: 'Войти', en: 'Sign in' },
+  'supportChat.title': { ro: 'Discută cu echipa BayShop', ru: 'Чат с командой BayShop', en: 'Chat with the BayShop team' },
+  'supportChat.description': { ro: 'Deschide conversațiile de suport asociate contului tău BayShop, direct în aplicație.', ru: 'Откройте переписку с поддержкой вашего аккаунта BayShop прямо в приложении.', en: 'Open the support conversations for your BayShop account directly in the app.' },
+  'supportChat.open': { ro: 'Discută cu suportul', ru: 'Написать в поддержку', en: 'Chat with support' },
+  'supportChat.opening': { ro: 'Se deschide conversația…', ru: 'Открываем чат…', en: 'Opening chat…' },
+  'supportChat.error.not_configured': { ro: 'Chatul nu este disponibil în această versiune a aplicației.', ru: 'Чат недоступен в этой версии приложения.', en: 'Chat is unavailable in this version of the app.' },
+  'supportChat.error.identity_unavailable': { ro: 'Nu am putut confirma contul pentru chat. Încearcă din nou.', ru: 'Не удалось подтвердить аккаунт для чата. Попробуйте снова.', en: 'Your account could not be verified for chat. Try again.' },
+  'supportChat.error.session_changed': { ro: 'Contul s-a schimbat. Deschide din nou suportul din contul actual.', ru: 'Аккаунт изменился. Откройте поддержку снова из текущего аккаунта.', en: 'Your account changed. Open support again from the current account.' },
+  'supportChat.error.failed': { ro: 'Conversația nu a putut fi deschisă. Încearcă din nou.', ru: 'Не удалось открыть чат. Попробуйте снова.', en: 'Chat could not be opened. Try again.' },
+  'supportChat.error.cleanup_failed': { ro: 'Conversația anterioară nu a putut fi închisă în siguranță. Repornește aplicația.', ru: 'Не удалось безопасно закрыть предыдущий чат. Перезапустите приложение.', en: 'The previous chat could not be closed safely. Restart the app.' },
+  'supportChat.error.busy': { ro: 'Așteaptă finalizarea deschiderii conversației.', ru: 'Дождитесь открытия чата.', en: 'Wait for the chat to finish opening.' },
+};

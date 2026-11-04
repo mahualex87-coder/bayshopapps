@@ -1,42 +1,65 @@
 {
   "expo": {
-    "name": "bayshop-mobile",
-    "slug": "bayshop-mobile",
-    "version": "1.0.0",
+    "name": "BayShop",
+    "slug": "bayshop",
+    "owner": "air-post-srl",
+    "version": "0.6.21",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "bayshopmobile",
+    "scheme": "bayshopdemo",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F4F7FB",
+    "primaryColor": "#DF4546",
+    "icon": "./assets/branding/icon.png",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bayshop.mobile.demo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.bayshop.mobile.demo",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_SETTINGS"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+        "foregroundImage": "./assets/branding/adaptive-foreground.png",
+        "monochromeImage": "./assets/branding/adaptive-monochrome.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/branding/icon.png"
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#08090D",
+          "image": "./assets/branding/brand-mark.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#08090D"
+          }
         }
-      ]
+      ],
+      "@config-plugins/react-native-blob-util",
+      "@config-plugins/react-native-pdf"
     ],
+    "extra": {
+      "eas": {
+        "projectId": "79eb6e37-5652-4b5a-80df-861842515e10"
+      }
+    },
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }
