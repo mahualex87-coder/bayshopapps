@@ -1,0 +1,1 @@
+{ "name": "@bayshop/shop-browser", "version": "0.1.0", "private": true, "peerDependencies": { "expo": "^58.0.0" } }

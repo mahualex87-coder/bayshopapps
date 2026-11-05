@@ -120,15 +120,21 @@ function methods(value: unknown): PaymentMethod[] | null {
   });
 }
 
+/** The order checkout reads only the member's billing, independently of supply invoices. */
+export function normalizePaymentBilling(value: unknown): PaymentBilling {
+  const row = object(value);
+  const billing = row.billingData == null ? null : object(row.billingData);
+  return { fields: billing === null ? null : Object.fromEntries(paymentBillingFields.map(key => [key, text(billing[key])])) as PaymentBillingFields, isSet: flag(row.isBillingSet) };
+}
+
 /** Normalize the GET /api/payments data object only. It confers no write
  * capability and never supplies a missing fee, limit, method or billing flag. */
 export function normalizePaymentCatalogData(value: unknown): PaymentCatalog {
   const row = object(value);
   const groups = list(row.unpaidInvoices, invoiceGroup);
-  const billing = row.billingData == null ? null : object(row.billingData);
   return {
     invoiceGroups: groups === null ? null : sortCurrencies(groups, group => group.currency),
-    billing: { fields: billing === null ? null : Object.fromEntries(paymentBillingFields.map(key => [key, text(billing[key])])) as PaymentBillingFields, isSet: flag(row.isBillingSet) },
+    billing: normalizePaymentBilling(row),
     methods: methods(row.paymentTypes),
   };
 }

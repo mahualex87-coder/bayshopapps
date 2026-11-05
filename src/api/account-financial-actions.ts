@@ -25,7 +25,7 @@ function text(raw: unknown): string | null { if (raw === undefined || raw === nu
 function decimal(raw: unknown, signed = false): string {
   if (typeof raw !== 'string' && typeof raw !== 'number') throw fail();
   const value = String(raw);
-  if (!(signed ? /^-?\d+(?:\.\d{1,4})?$/ : /^\d+(?:\.\d{1,4})?$/).test(value) || !Number.isFinite(Number(value)) || Math.abs(Number(value)) > 1000000000) throw fail();
+  if (!(signed ? /^-?\d+(?:\.\d+)?$/ : /^\d+(?:\.\d{1,4})?$/).test(value) || !Number.isFinite(Number(value)) || Math.abs(Number(value)) > 1000000000) throw fail();
   return value;
 }
 function currency(raw: unknown): string { const value = text(raw)?.toUpperCase(); if (!value || !/^[A-Z]{3}$/.test(value)) throw fail(); return value; }
@@ -65,8 +65,12 @@ export function normalizeOrderCancellation(raw: unknown, expectedId: string): Or
 
 export function refundAmount(raw: string): string {
   const value = raw.trim().replace(',', '.');
-  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(value) || Number(value) <= 0 || Number(value) > 1000000000) throw new MutationInputError('refunds.invalidAmount', { amount: 'refunds.invalidAmount' });
-  return Number(value).toFixed(2);
+  if (!/^\d{1,10}(?:\.\d+)?$/.test(value)) throw new MutationInputError('refunds.invalidAmount', { amount: 'refunds.invalidAmount' });
+  const [whole, fraction = ''] = value.split('.');
+  // Match refundRequest::normalizeAmount without losing half-cent ties to binary floating point.
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0').slice(0, 2)) + (fraction.charAt(2) >= '5' ? 1 : 0);
+  if (cents <= 0 || cents > 100000000000) throw new MutationInputError('refunds.invalidAmount', { amount: 'refunds.invalidAmount' });
+  return Math.floor(cents / 100) + '.' + String(cents % 100).padStart(2, '0');
 }
 
 export function quoteRefund(data: RefundOverview, input: { currencyId: string; refundTypeId: string; amount: string }): RefundQuote {

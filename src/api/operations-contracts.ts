@@ -20,7 +20,9 @@ import type { ReadPlan, MutationPlan } from './mutations.ts';
 import { normalizeUserUrl } from '../domain/user-url.ts';
 import { isWaitingStorageTitle } from '../domain/waiting-warehouse-options.ts';
 import { normalizeDeliveryMethods, normalizeDeliveryAddresses, type DeliverySelection } from './local-delivery.ts';
-import { checkoutAddresses, checkoutCarriers, checkoutCreated, checkoutInsurance, checkoutLocal, checkoutPayments } from './checkout-normalize.ts';
+import { planOrderPaymentStart, type OrderPaymentStartInput } from './order-payment.ts';
+import { normalizePaymentBilling, type PaymentBilling } from './payments-catalog.ts';
+import { checkoutAddresses, checkoutCarriers, checkoutCreated, checkoutInsurance, checkoutLocal, checkoutPayments, type CheckoutPayments } from './checkout-normalize.ts';
 import { ApiContractError, normalizeBalanceHistoryData, normalizeCountersData, normalizeRecipientAddressesData, normalizeStockData, normalizeWarehousesData } from './normalize.ts';
 import { normalizeCartItem, normalizeCartList, normalizeCartPrices, normalizeOrderDetail, normalizeOrdersList, normalizeOutgoingDeclaration, normalizeShipmentOperationDetail, normalizeStockDeclaration, normalizeStockDetail, normalizeStockServicePrices, normalizeUploadCollection, normalizeWaitingDetail, type CartItem, type CartPrices, type DeclarationDocument, type OrderDetail, type OrderSummary, type ShipmentOperationDetail, type StockDetail, type StockServicePrices, type UploadCollection, type WaitingDetail } from './operations-normalize.ts';
 
@@ -59,7 +61,7 @@ export type WaitingParcelInput = AttachmentChanges & {
 };
 export type StockDeclarationInput = AttachmentChanges & { declarationItems: DeclarationItemInput[]; currency?: string };
 export type OutgoingDeclarationInput = { currencyId: string; declarationItems: DeclarationItemInput[] };
-export type CartItemInput = { storage_id: string; url: string; price: string; quantity: string | number; shipping: string; title: string; color?: string; size?: string; comment?: string; selectedShop?: { id: string; countryCode?: string } };
+export type CartItemInput = { storage_id: string; url: string; price: string; quantity: string | number; shipping: string; title: string; color?: string; size?: string; comment?: string; expectedMarket?: { countryCode: 'RO'; currency: 'RON' }; selectedShop?: { id: string; countryCode?: string } };
 export type SerializedOperation = { fields: OperationFields; files: OperationUpload[]; encoding: 'form' | 'multipart' };
 
 export class OperationValidationError extends Error {
@@ -292,6 +294,7 @@ export type ReadCommand =
   | { kind: 'warehouses.read' }
   | { kind: 'recipients.read' }
   | { kind: 'waiting.detail' | 'stock.detail' | 'stock.declaration.read' | 'shipment.detail' | 'shipment.declaration.read' | 'shipment.invoices.read' | 'shipment.customs.read' | 'cart.detail' | 'order.detail' | 'recipient.detail'; id: string }
+  | { kind: 'orders.payment.billing' }
   | { kind: 'cart.list' | 'orders.list'; countryCode: string }
   | { kind: 'cart.prices'; ids: string[] }
   | { kind: 'cart.link'; url: string; storageId?: string }
@@ -336,6 +339,7 @@ export type ReadResult<Q extends ReadCommand> =
   Q extends { kind: 'cart.detail' } ? CartItem :
   Q extends { kind: 'cart.link' } ? CartLinkData :
   Q extends { kind: 'cart.prices' } ? CartPrices :
+  Q extends { kind: 'orders.payment.billing' } ? PaymentBilling :
   Q extends { kind: 'orders.list' } ? OrderSummary[] :
   Q extends { kind: 'order.detail' } ? OrderDetail[] :
   Q extends { kind: 'checkout.addresses' } ? ReturnType<typeof checkoutAddresses> :
@@ -402,6 +406,7 @@ export function planRead<Q extends ReadCommand>(command: Q): ReadPlan<ReadResult
     case 'cart.detail': plan = { path: `/api/cart/${operationId(command.id)}`, normalize: raw => normalizeCartItem(raw) }; break;
     case 'cart.prices': plan = { path: query('/api/cart-prices', { 'carts[]': ids(command.ids) }), normalize: normalizeCartPrices }; break;
     case 'cart.link': plan = { path: query('/api/cart-link/', { url: cartProductUrl(command.url), ...(command.storageId ? { storage_id: operationId(command.storageId, 'storage_id') } : {}) }), normalize: normalizeCartLinkData }; break;
+    case 'orders.payment.billing': plan = {path:'/api/payments',normalize:normalizePaymentBilling};break;
     case 'orders.list': plan = { path: `/api/order-list/${countryCode(command.countryCode)}`, normalize: normalizeOrdersList }; break;
     case 'order.detail': plan = { path: `/api/order/${operationId(command.id)}`, normalize: normalizeOrderDetail }; break;
     case 'recipient.detail': plan = { path: `/api/member-address/${operationId(command.id)}`, normalize: raw => raw }; break;
@@ -445,11 +450,12 @@ export function planRead<Q extends ReadCommand>(command: Q): ReadPlan<ReadResult
   return plan as ReadPlan<ReadResult<Q>>;
 }
 
-export type CheckoutInput = { carts: string[]; addressId: string; shipperId: string; localPickup?: { methodKey?: string; optionKey: string; optionId: string }; additionServices: string[]; waitAllItems: boolean; allowLowerQuantity: boolean; allowOverpricing: boolean; insurance: boolean; paymentType: string };
+export type CheckoutInput = { carts: string[]; addressId: string; shipperId: string; localPickup?: { methodKey?: string; optionKey: string; optionId: string }; additionServices: string[]; waitAllItems: boolean; allowLowerQuantity: boolean; allowOverpricing: boolean; insurance: boolean; paymentType: string; reviewedPayments?: CheckoutPayments };
 export type PackingInput = { boxes: string[]; addressId: string; shipperId: string; insurance: boolean; sentOnUserAlert: boolean; local_delivery?: string; terminal?: string; localStorage?: string; localAddressId?: string; additionServices?: string[] };
 export type MutationCommand =
   | FinancialMutationCommand
   | OutgoingServiceMutationCommand
+  | { kind: 'orders.payment.start'; input: OrderPaymentStartInput }
   | { kind: 'payments.legacy.start'; input: LegacyPaymentStartInput }
   | { kind: 'payments.start'; input: PaymentStartInput }
   | { kind: 'shipment.review.save'; id: string; input: ParcelReviewInput }
@@ -501,6 +507,7 @@ export function planMutation(command: MutationCommand): MutationPlan {
   switch (command.kind) {
     case 'refund.create': case 'refund.cancel': case 'order.cancel': return planFinancialMutation(command);
     case 'outgoing.service.set': return planOutgoingServiceMutation(command);
+    case 'orders.payment.start': return planOrderPaymentStart(command.input);
     case 'payments.legacy.start': return planLegacyPaymentStart(command.input);
     case 'payments.start': return planPaymentStart(command.input);
     case 'shipment.review.save': return planParcelReviewSave(command.id, command.input);
@@ -543,7 +550,18 @@ export function planMutation(command: MutationCommand): MutationPlan {
       return serializedPlan(`/api/customs-photos/${operationId(command.id)}`, { fields: {}, files: command.files.map(file => ({ field: 'customsPhotos[]', ...validateUpload(file, 'customsPhoto') })), encoding: 'multipart' }, ['sent', 'received']);
     }
     case 'shipment.customs.delete': return ack(`/api/customs-photos-delete/${operationId(command.id)}/${operationId(command.fileId, 'fileId')}`, 'DELETE', {}, ['sent', 'received']);
-    case 'cart.create': case 'cart.edit': return { ...ack(command.kind === 'cart.create' ? '/api/cart' : `/api/cart/${operationId(command.id)}`, 'POST', cartItemFields(command.input), []), encoding: 'json', normalize: raw => { acknowledge(raw); return normalizeCartSavedData(object(raw).data); } };
+    case 'cart.create': case 'cart.edit': return {
+      ...ack(command.kind === 'cart.create' ? '/api/cart' : `/api/cart/${operationId(command.id)}`, 'POST', cartItemFields(command.input), []),
+      encoding: 'json',
+      normalize: raw => {
+        acknowledge(raw);
+        const saved = normalizeCartSavedData(object(raw).data);
+        if (command.kind === 'cart.edit' && (saved.id !== command.id || saved.storageId !== command.input.storage_id)) {
+          throw new ApiContractError('confirmarea produsului din coș');
+        }
+        return saved;
+      },
+    };
     case 'cart.delete': return ack(query('/api/cart', { 'items[]': ids(command.ids) }), 'DELETE', {}, []);
     case 'recipient.delete': return ack(`/api/member-address/${operationId(command.id)}/`, 'DELETE', {}, ['recipients']);
     case 'recipient.save': {
@@ -597,7 +615,7 @@ export function planMutation(command: MutationCommand): MutationPlan {
         if (!methodKey || !/^[a-zA-Z0-9_-]+$/.test(methodKey) || (storageKey ? storageKey !== methodKey : optionKey !== 'terminal' && optionKey !== 'localAddressId')) throw new OperationValidationError('local_delivery');
         fields.local_delivery = methodKey; fields[optionKey] = operationId(optionId);
       }
-      return { path: '/api/order-create/', method: 'POST', encoding: 'json', fields, responseMode: 'envelope', invalidate: ['balance'], normalize: checkoutCreated };
+      return { path: '/api/order-create/', method: 'POST', encoding: 'json', fields, responseMode: 'envelope', invalidate: ['balance'], normalize: raw=>{ const order=checkoutCreated(raw); if (order.type!==input.paymentType || order.type==='terminals' && order.orders.some(item=>!item.terminalCode)) throw new ApiContractError('confirmarea plății comenzii'); return order; } };
     }
     case 'packing.create': {
       const input = command.input;

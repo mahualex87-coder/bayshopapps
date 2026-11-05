@@ -119,10 +119,15 @@ export function normalizePersonalProfileData(data: unknown, profile: LiveProfile
   const row = object(data, resource);
   const phone = optionalText(row.phone, resource);
   const phoneCode = optionalText(row.phoneCode, resource);
+  const rawCountryId = Number.isSafeInteger(row.countryId) ? String(row.countryId) : row.countryId;
+  const countryId = rawCountryId === '0' ? null : optionalText(rawCountryId, resource);
+  const country = countryId && Array.isArray(row.countries)
+    ? row.countries.find(entry => isObject(entry) && String(entry.id) === countryId) : null;
+  const countryCode = typeof country?.code === 'string' && /^[a-z]{2}$/i.test(country.code) ? country.code.toUpperCase() : null;
   const languages = row.languages == null ? row.languages : Object.fromEntries(Object.entries(object(row.languages, resource)).map(([id, title]) => [id, requiredText(title, resource)]));
   return {
     ...profile, firstName: optionalText(row.name, resource), lastName: optionalText(row.surname, resource), phone: phone === null ? null : phone.startsWith('+') || phoneCode === null ? phone : `${phoneCode}${phone}`,
-    ...(row.countryId !== undefined ? { countryId: optionalText(row.countryId, resource) } : {}),
+    ...(row.countryId !== undefined ? { countryId, countryCode } : {}),
     ...(row.languageId !== undefined ? { languageId: optionalText(row.languageId, resource) } : {}),
     ...(row.languageCode !== undefined ? { languageCode: optionalText(row.languageCode, resource) } : {}),
     ...(languages !== undefined ? { languages } : {}),

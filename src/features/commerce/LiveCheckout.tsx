@@ -5,11 +5,11 @@ import { countryDisplayName } from '@/domain/presentation-labels';
 import { ServiceIdentity, ServiceDetailRow } from '@/components/ServiceIdentity';
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { router, useIsFocused } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { useLiveAccount } from '@/api/context';
 import { errorMessage } from '@/api/client';
 import type { CheckoutInput } from '@/api/operations-contracts';
-import { checkoutItems, checkoutItemFingerprint, checkoutPaymentIssue, checkoutLocalMethodKey, checkoutLocalSelection, type CreatedOrder } from '@/api/checkout-normalize';
+import { checkoutItems, checkoutItemFingerprint, checkoutPaymentIssue, orderBillingMissing, checkoutLocalMethodKey, checkoutLocalSelection, type CreatedOrder, type CheckoutPayments } from '@/api/checkout-normalize';
 import type { CartItem } from '@/api/operations-normalize';
 import type { Resource } from '@/api/service';
 import { useI18n } from '@/i18n/context';
@@ -20,10 +20,31 @@ import { PickupPointPicker } from '@/components/PickupPointPicker';
 import { DetailRow, ResourceStatus, displayMoney } from '@/features/live/shared';
 import { useOperationView } from '@/features/live/forms/useOperationView';
 import { CountryLabel } from '@/components/CountryFlag';
+import { OrderPaymentPanel } from './OrderPaymentPanel';
+import { OrderCheckoutBilling } from './OrderCheckoutBilling';
+import type { BillingInput } from '@/api/account-settings';
 
 function Choice({ label, selected, disabled, onPress, children, multiple = false, service = false, logoUrl }: PropsWithChildren<{ label: string; selected: boolean; disabled?: boolean; onPress: () => void; multiple?: boolean; service?: boolean; logoUrl?: string | null }>) {
   const { colors, s } = useUi();
   return <Pressable accessibilityRole={multiple ? 'checkbox' : 'radio'} aria-checked={selected} accessibilityState={{ checked: selected, disabled }} disabled={disabled} onPress={onPress} style={[s.card, { minHeight: minTouchTarget }, selected && { borderColor: colors.accent, backgroundColor: colors.soft }, disabled && { opacity: .55 }]}>{service ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>{selected && <Text accessible={false} aria-hidden style={s.heading}>✓</Text>}<ServiceIdentity title={label} logoUrl={logoUrl} textStyle={s.heading} style={{ flex: 1 }} /></View> : <Text style={s.heading}>{selected ? '✓ ' : ''}{label}</Text>}{children}</Pressable>;
+}
+export function CheckoutPaymentChoices({ quote, value, disabled, onSelect }: {
+  quote: CheckoutPayments; value: string; disabled: boolean; onSelect: (key: string) => void;
+}) {
+  const { t, formatNumber } = useI18n();
+  const { s } = useUi();
+  const methods = quote.methods.filter(item => item.key !== 'apple-pay' || Platform.OS === 'ios');
+  if (!methods.length) return <Notice>{t('commerce.noPaymentMethods')}</Notice>;
+  return <>{methods.map(item => {
+    const issue = checkoutPaymentIssue(item, quote.currency, quote);
+    return <Choice key={item.key} label={item.key === 'platescro' ? t('commerce.payCard') : item.title}
+      selected={value === item.key} disabled={disabled || !!issue} onPress={() => onSelect(item.key)}>
+      {!!item.description && <Text style={s.small}>{item.description}</Text>}
+      <Text style={s.heading}>{displayMoney(item.totalToPay, quote.currency, formatNumber)}</Text>
+      {item.commission > 0 && <DetailRow label={t('commerce.paymentCommission')} value={displayMoney(item.commission, quote.currency, formatNumber)} />}
+      {issue && <Notice>{t(issue)}</Notice>}
+    </Choice>;
+  })}</>;
 }
 export function LiveCheckoutScreen({ cartIds }: { cartIds: string[] }) {
   const live = useLiveAccount(); const { language } = useI18n();
@@ -60,8 +81,10 @@ function CheckoutFlow({ cartIds }: { cartIds: string[] }) {
   const [addressId, setAddressId] = useState(''), [carrierId, setCarrierId] = useState(''), [localId, setLocalId] = useState(''), [optionId, setOptionId] = useState('');
   const [openPickup, setOpenPickup] = useState(false); const [localPage, setLocalPage] = useState(1), [localAddressId, setLocalAddressId] = useState('');
   const [insurance, setInsurance] = useState(false), [services, setServices] = useState<string[]>([]), [paymentKey, setPaymentKey] = useState('');
+  const [billingInput, setBillingInput] = useState<BillingInput | null>(null);
+  const [editingBilling, setEditingBilling] = useState(false);
   const [waitAllItems, setWaitAllItems] = useState(false), [allowLowerQuantity, setAllowLowerQuantity] = useState(false), [allowOverpricing, setAllowOverpricing] = useState(false);
-  const [checking, setChecking] = useState(false), [error, setError] = useState<string | null>(null), [uncertain, setUncertain] = useState(false), [created, setCreated] = useState<CreatedOrder | null>(null), [confirmation, setConfirmation] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false), [error, setError] = useState<string | null>(null), [uncertain, setUncertain] = useState(false), [created, setCreated] = useState<{ order: CreatedOrder; quote: CheckoutPayments } | null>(null), [confirmation, setConfirmation] = useState<string | null>(null);
   const submitting = useRef(false);
   const controller = useRef<AbortController | null>(null); useEffect(() => () => controller.current?.abort(), []);
   const validIds = cartIds.length > 0 && new Set(cartIds).size === cartIds.length && cartIds.every(id => /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id)));
@@ -88,14 +111,19 @@ function CheckoutFlow({ cartIds }: { cartIds: string[] }) {
   const extras = useOperationView(address && carrier ? { kind: 'checkout.insurance', carts: cartIds, addressId, shipperId: carrier.id } : null);
   const payments = useOperationView(validIds && step >= 4 && !created ? { kind: 'checkout.payments', carts: cartIds } : null);
   const payment = payments.resource.data?.methods.find(item => item.key === paymentKey);
+  const hasBilling = !!payment && orderBillingMissing(payment.key, null);
+  const billing = useOperationView(hasBilling && !created ? { kind: 'orders.payment.billing' } : null);
+  const refreshBilling = billing.refresh;
+  const billingReady = !hasBilling || !editingBilling && !billing.resource.error && !billing.resource.loading && !!billing.resource.data
+    && (!!billingInput || !orderBillingMissing(payment!.key, billing.resource.data));
   const busy = checking || live.mutationPending;
   const guard = useDraftGuard(!created && (step > 0 || !!addressId || busy), { fallbackHref: '/cart', pending: busy, onBack: () => { if (busy) return true; if (!step) return false; setStep(value => value - 1); setConfirmation(null); return true; } });
   const readyAddress = !!address?.completed && !addresses.resource.loading && !addresses.resource.error;
   const readyCarrier = !!carrier && !carrier.selfSend && !carriers.resource.loading && !carriers.resource.error;
   const readyLocal = !!carrier && (!carrier.localDelivery || !!localSelection && !locals.resource.loading && !locals.resource.error && (local?.optionsKey !== 'localAddressId' || !localAddresses.resource.loading && !localAddresses.resource.error));
   const readyExtras = !!extras.resource.data && !extras.resource.loading && !extras.resource.error && services.every(key => extras.resource.data!.services.some(item => item.key === key && item.price !== null)) && (!insurance || carrier?.insurance === true && extras.resource.data.available);
-  const readyPayment = !!payment && !!payments.resource.data && !checkoutPaymentIssue(payment, payments.resource.data.currency) && !payments.resource.error && !payments.resource.loading;
-  const review = JSON.stringify([cartIds, products.resource.data, address, carrier, local, localOption, localAddress, extras.resource.data, insurance, services, payments.resource.data, paymentKey, waitAllItems, allowLowerQuantity, allowOverpricing]);
+  const readyPayment = !!payment && !!payments.resource.data && !checkoutPaymentIssue(payment, payments.resource.data.currency, payments.resource.data) && billingReady && !payments.resource.error && !payments.resource.loading;
+  const review = JSON.stringify([cartIds, products.resource.data, address, carrier, local, localOption, localAddress, extras.resource.data, insurance, services, payments.resource.data, paymentKey, hasBilling ? billingInput : null, waitAllItems, allowLowerQuantity, allowOverpricing]);
   const ready = productsReady && [readyAddress, readyCarrier, readyLocal, readyExtras, readyPayment, readyAddress && readyCarrier && readyLocal && readyExtras && readyPayment && confirmation === review][step];
   const money = (amount: number | null, currency: string | null) => amount === null ? t('common.unavailable') : displayMoney(amount, currency, formatNumber);
   const resetCarrier = () => { setCarrierId(''); setLocalId(''); setOptionId(''); setLocalAddressId(''); setLocalPage(1); setInsurance(false); setServices([]); setConfirmation(null); };
@@ -117,16 +145,28 @@ function CheckoutFlow({ cartIds }: { cartIds: string[] }) {
       if (abort.signal.aborted) return;
       const matches = checkoutItemFingerprint(newProducts) === checkoutItemFingerprint(products.resource.data) && JSON.stringify(newAddresses.items.find(item => item.id === addressId)) === JSON.stringify(address) && JSON.stringify(newCarriers.find(item => item.id === carrierId)) === JSON.stringify(carrier) && (!carrier.localDelivery || JSON.stringify(newLocals?.find(item => item.id === localId)) === JSON.stringify(local)) && (local?.optionsKey !== 'localAddressId' || JSON.stringify(newLocalAddresses?.items.find(item => item.id === localAddressId)) === JSON.stringify(localAddress)) && JSON.stringify(newExtras) === JSON.stringify(extras.resource.data) && JSON.stringify(newPayments) === JSON.stringify(payments.resource.data);
       if (!matches) { setConfirmation(null); setError('commerce.quoteChanged'); products.refresh(); void addresses.refresh(); void carriers.refresh(); void locals.refresh(); void localAddresses.refresh(); void extras.refresh(); void payments.refresh(); return; }
-      const input: CheckoutInput = { carts: cartIds, addressId, shipperId: carrierId, ...(carrier.localDelivery && localSelection ? { localPickup: localSelection } : {}), additionServices: services, insurance, waitAllItems: waitAllItems || carrier.forceWaitAllItems === true, allowLowerQuantity, allowOverpricing, paymentType: payment.key };
+      if (hasBilling) {
+        const latest = await live.readView({ kind: 'orders.payment.billing' }, { signal: abort.signal });
+        if (!billingInput && orderBillingMissing(payment.key, latest)) {
+          setConfirmation(null); setStep(4); setError('payments.billingMissing'); void refreshBilling(); return;
+        }
+      }
+      const input: CheckoutInput = { carts: cartIds, addressId, shipperId: carrierId, ...(carrier.localDelivery && localSelection ? { localPickup: localSelection } : {}), additionServices: services, insurance, waitAllItems: waitAllItems || carrier.forceWaitAllItems === true, allowLowerQuantity, allowOverpricing, paymentType: payment.key, reviewedPayments: newPayments };
       const result = await live.mutate({ kind: 'order.create', input });
       if (abort.signal.aborted) return;
-      if (result.ok) setCreated(result.data as CreatedOrder);
+      if (result.ok) setCreated({ order: result.data as CreatedOrder, quote: newPayments });
       else { setError(result.error || 'errors.saveFailed'); setUncertain(result.outcome === 'unknown'); }
     } catch (error) { if (!abort.signal.aborted) setError(errorMessage(error)); }
     finally { submitting.current = false; if (!abort.signal.aborted) setChecking(false); }
   };
   const labels = ['commerce.recipient', 'commerce.carrier', 'commerce.localMethod', 'commerce.services', 'commerce.payment', 'commerce.review'];
-  if (created) return <Screen title={t('commerce.orderCreated')}><Notice>{t('commerce.createdNotice')}</Notice>{created.orders.map(order => <View key={order.id} style={s.card}><Text selectable style={s.heading}>{order.uid || order.id}</Text><Button onPress={() => guard.bypass(() => router.replace({ pathname: '/order/[id]', params: { id: order.id } }))}>{t('commerce.details')}</Button></View>)}<Button secondary onPress={() => guard.bypass(() => router.replace('/payments'))}>{t('commerce.paymentStatus')}</Button></Screen>;
+  if (created) return <Screen title={t('commerce.orderCreated')}>
+    <OrderPaymentPanel created={created.order} quote={created.quote} billingInput={billingInput ?? undefined} />
+    {created.order.orders.map(order => <View key={order.id} style={s.card}>
+      <Text selectable style={s.heading}>{order.uid || order.id}</Text>
+      <Button secondary onPress={() => guard.bypass(() => router.replace({ pathname: '/order/[id]', params: { id: order.id } }))}>{t('commerce.details')}</Button>
+    </View>)}
+  </Screen>;
   return <Screen title={t('commerce.checkoutTitle')} subtitle={t('commerce.step', { step: step + 1, count: labels.length })}>
     {!validIds ? <Notice error>{t('errors.invalidField')}</Notice> : <>
       <Text accessibilityRole="header" style={s.heading}>{t(labels[step])}</Text>
@@ -156,7 +196,25 @@ function CheckoutFlow({ cartIds }: { cartIds: string[] }) {
         {extras.resource.data.services.map(item => <Choice key={item.key} label={item.title} multiple selected={services.includes(item.key)} disabled={busy || item.price === null} onPress={() => setServices(values => values.includes(item.key) ? values.filter(value => value !== item.key) : [...values, item.key])}><Text style={s.body}>{item.description}</Text><Text style={s.small}>{money(item.price, extras.resource.data!.currency)}</Text></Choice>)}
         {carrier?.forceWaitAllItems && <Notice>{t('cartLink.waitAllRequired')}</Notice>}{([['waitAllItems', waitAllItems || carrier?.forceWaitAllItems === true, setWaitAllItems], ['allowLowerQuantity', allowLowerQuantity, setAllowLowerQuantity], ['allowOverpricing', allowOverpricing, setAllowOverpricing]] as const).map(([key, value, change]) => <Choice key={key} label={t(`commerce.${key}`)} multiple selected={value} disabled={busy || key === 'waitAllItems' && carrier?.forceWaitAllItems === true} onPress={() => change(!value)} />)}
       </>}</>}
-      {step === 4 && <><ResourceStatus resource={payments.resource} onRefresh={() => { if (!busy) { setConfirmation(null); void payments.refresh(); } }} />{payments.resource.data?.methods.length === 0 && !payments.resource.loading && !payments.resource.error && <Notice>{t('commerce.noPaymentMethods')}</Notice>}{payments.resource.data?.methods.map(item => <Choice key={item.key} label={item.title} selected={paymentKey === item.key} disabled={busy || !!checkoutPaymentIssue(item, payments.resource.data!.currency)} onPress={() => { setPaymentKey(item.key); setConfirmation(null); }}><Text style={s.body}>{item.description}</Text><Text style={s.heading}>{money(item.totalToPay, payments.resource.data!.currency)}</Text>{checkoutPaymentIssue(item, payments.resource.data!.currency) && <Notice>{t(checkoutPaymentIssue(item, payments.resource.data!.currency)!)}</Notice>}{item.maxAmount > 0 && <DetailRow label={t('commerce.paymentLimit')} value={money(item.maxAmount, payments.resource.data!.currency)} />}</Choice>)}</>}
+      {step === 4 && <>
+        <ResourceStatus resource={payments.resource} onRefresh={() => { if (!busy) { setConfirmation(null); void payments.refresh(); } }} />
+        {payments.resource.data && <CheckoutPaymentChoices quote={payments.resource.data} value={paymentKey} disabled={busy} onSelect={key => {
+          if (paymentKey !== key) { setEditingBilling(false); setBillingInput(null); }
+          setPaymentKey(key); setError(null); setConfirmation(null);
+        }} />}
+        {hasBilling && <View style={s.card}>
+          <Text style={s.heading}>{t('payments.billing')}</Text>
+          <ResourceStatus resource={billing.resource} onRefresh={() => { void refreshBilling(); }} />
+          {editingBilling && billing.resource.data
+            ? <OrderCheckoutBilling saved={billing.resource.data} selected={billingInput} onClose={() => setEditingBilling(false)} onUse={value => {
+                setBillingInput(value); setEditingBilling(false); setError(null); setConfirmation(null);
+              }} />
+            : <>
+              {billing.resource.data && <Text style={s.small}>{t(billingInput ? 'commerce.orderBillingConsent' : billingReady ? 'commerce.orderBillingReady' : 'payments.billingMissing')}</Text>}
+              <Button secondary disabled={busy || !billing.resource.data} onPress={() => setEditingBilling(true)}>{t('payments.editBilling')}</Button>
+            </>}
+        </View>}
+      </>}
       {step === 5 && <><ConsolidationNotice carrierAllowsConsolidation={carrier?.consolidation} point={localOption} />{[...new Set([...(addresses.resource.data?.notifications || []), ...(extras.resource.data?.notifications || [])])].map((text, index) => <Notice key={index}>{text}</Notice>)}<View style={s.card}><DetailRow country countryName={address?.country} label={t('commerce.recipient')} value={[address?.name, address?.address, address?.city, address?.country ? countryDisplayName(null, address.country, language) : null].filter(Boolean).join(', ') || null} />{carrier && <ServiceDetailRow label={t('commerce.carrier')} title={carrier.title} logoUrl={carrier.logoUrl} />}{carrier?.localDelivery && <DetailRow label={t('commerce.pickup')} value={localAddress ? [localAddress.name, localAddress.address, localAddress.city].filter(Boolean).join(', ') : localOption?.address ?? null} />}{carrier?.localDelivery && local && <DeliveryPrice quote={{ price: local.optionsKey === 'localAddressId' ? localAddress?.price ?? null : localOption?.price ?? null, currency: local.optionsKey === 'localAddressId' ? localAddress?.currency ?? local.currency : localOption?.currency ?? local.currency }} />}<DetailRow label={t('commerce.payment')} value={payment?.title ?? null} />{payments.resource.data?.lines.map(line => <DetailRow key={line.key} label={t(`commerce.${line.key}`)} value={money(line.amount, payments.resource.data!.currency)} />)}{payment && <><DetailRow label={t('commerce.paymentCommission')} value={money(payment.commission, payments.resource.data!.currency)} /><DetailRow label={t('commerce.totalToPay')} value={money(payment.totalToPay, payments.resource.data!.currency)} /></>}<Notice>{t('commerce.deliveryLater')}</Notice>{extras.resource.data?.services.filter(item => services.includes(item.key)).map(item => <DetailRow key={item.key} label={item.title} value={money(item.price, extras.resource.data!.currency)} />)}{(['waitAllItems', 'allowLowerQuantity', 'allowOverpricing', 'insurance'] as const).map(key => <DetailRow key={key} label={t(`commerce.${key}`)} value={t(({ waitAllItems: waitAllItems || carrier?.forceWaitAllItems === true, allowLowerQuantity, allowOverpricing, insurance })[key] ? 'commerce.yes' : 'commerce.no')} />)}</View><Choice label={t('commerce.confirmOrder')} multiple selected={confirmation === review} disabled={busy || uncertain} onPress={() => setConfirmation(confirmation === review ? null : review)} /></>}
       {error && <Notice error>{t(error)}</Notice>}{uncertain && <><Notice error>{t('commerce.unknown')}</Notice><Button secondary onPress={() => guard.bypass(() => router.replace('/shopping'))}>{t('commerce.checkList')}</Button></>}
       {step < 5 ? <Button disabled={!ready || busy || uncertain} onPress={() => { setError(null); setStep(step + 1); }}>{t('commerce.continue')}</Button> : <Button disabled={!ready || !live.canMutate || busy || uncertain} onPress={() => { void submit(); }}>{t(busy ? 'commerce.submitting' : 'commerce.placeOrder')}</Button>}

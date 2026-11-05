@@ -1,3 +1,4 @@
+import { BillingFields } from './BillingFields';
 import { useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -8,7 +9,7 @@ import { useDraftGuard } from '@/navigation/useDraftGuard';
 import { Button, Field, Notice, Screen, useUi } from '@/ui';
 import { DetailRow, ResourceStatus } from '@/features/live/shared';
 import { AttachmentsEditor, type ExistingFile, type StagedFile } from '@/features/live/forms/AttachmentsEditor';
-import { MutationFeedback, OptionPicker, useAccountView } from './shared';
+import { MutationFeedback, useAccountView } from './shared';
 
 type SettingsFormProps = { settings: AccountSettings; reload: () => void };
 
@@ -57,9 +58,9 @@ export function LiveSecuritySettings() {
   return <Screen title={t('accountSettings.security')} subtitle={t('accountSettings.securityIntro')}><SettingsContent>{props => <PasswordForm {...props} />}</SettingsContent></Screen>;
 }
 
-const billingLabels: Record<keyof BillingInput, string> = { first_name: 'field.firstName', last_name: 'field.lastName', company_name: 'field.company', address1: 'field.address', city: 'field.city', state: 'field.region', email: 'field.email', phone: 'field.phone', zip: 'field.postalCode', country: 'field.country' };
+
 function BillingForm({ settings, reload }: SettingsFormProps) {
-  const { t } = useI18n(); const { s } = useUi(); const live = useLiveAccount();
+  const { t } = useI18n(); const live = useLiveAccount();
   const [form, setForm] = useState(settings.billing.fields); const [baseline, setBaseline] = useState(settings.billing.fields);
   const [error, setError] = useState<string | null>(null); const [fields, setFields] = useState<Record<string, string>>({}); const [saved, setSaved] = useState(false); const [unknown, setUnknown] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -78,15 +79,9 @@ function BillingForm({ settings, reload }: SettingsFormProps) {
       finally { setVerifying(false); }
     } else { setFields(result.fieldErrors || {}); setError(result.error || 'errors.loadFailed'); setUnknown(result.outcome === 'unknown'); }
   };
-  const field = (key: keyof BillingInput) => <Field label={t(billingLabels[key])} value={form[key]} onChangeText={value => set(key, value)} editable={!disabled} error={fields[key] ? t(fields[key]) : undefined} keyboardType={key === 'email' ? 'email-address' : key === 'phone' ? 'phone-pad' : 'default'} autoCapitalize={key === 'email' ? 'none' : 'sentences'} autoCorrect={key !== 'email'} />;
   return <>
     {!enabled && <Notice>{t('accountSettings.serverUpdateRequired')}</Notice>}
-    <View style={s.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}><View style={{ flex: 1 }}>{field('first_name')}</View><View style={{ flex: 1 }}>{field('last_name')}</View></View>
-      {field('company_name')}
-      <OptionPicker country label={t('field.country')} value={form.country} options={settings.billing.countries} disabled={disabled} error={fields.country} onChange={value => set('country', value)} />
-      {field('state')}{field('city')}{field('address1')}{field('zip')}{field('phone')}{field('email')}
-    </View>
+    <BillingFields form={form} countries={settings.billing.countries} fields={fields} disabled={disabled} set={set} />
     <SettingsFeedback error={error} saved={saved} unknown={unknown} onCheck={() => confirmDiscard(reload)} />
     <Button disabled={disabled || !dirty || !live.canMutate} onPress={() => { void save(); }}>{t(live.mutationPending || verifying ? 'accountOps.saving' : 'accountOps.save')}</Button>
   </>;

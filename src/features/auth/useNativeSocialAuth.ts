@@ -58,11 +58,16 @@ export function useNativeSocialAuth(enabled: boolean) {
     const app = AppState.addEventListener('change', state => { if (state === 'active') expire(); });
     return () => { clearTimeout(timer); app.remove(); };
   }, [pending, reset]);
+  const refreshProviders = () => {
+    setCapabilities(null); setProviders([]); setUnavailable(false); setCheckingAvailability(true);
+    setAvailabilityRevision(value => value + 1);
+  };
   const receive = async (result: SocialResult<SocialAuthData>, controller: AbortController) => {
     if (!mounted.current || controller.signal.aborted || active.current !== controller) return;
     if (result.outcome !== 'success') {
       setError(socialErrorKey(result.errorCode));
-      if (result.outcome === 'unknown' || ['flow_expired', 'account_changed', 'account_link_required'].includes(result.errorCode)) { setPending(null); client.current = null; }
+      if (result.outcome === 'unknown' || ['flow_expired', 'account_changed', 'account_link_required', 'provider_unavailable'].includes(result.errorCode)) { setPending(null); client.current = null; }
+      if (result.errorCode === 'provider_unavailable') refreshProviders();
       return;
     }
     if (result.data.status === 'completion_required') { setPending(result.data); return; }
@@ -86,7 +91,12 @@ export function useNativeSocialAuth(enabled: boolean) {
     try {
       const challenge = await attempt.challenge(provider, language, controller.signal);
       if (controller.signal.aborted) return;
-      if (challenge.outcome !== 'success') { setError(socialErrorKey(challenge.errorCode)); client.current = null; return; }
+      if (challenge.outcome !== 'success') {
+        setError(socialErrorKey(challenge.errorCode));
+        client.current = null;
+        if (challenge.errorCode === 'provider_unavailable') refreshProviders();
+        return;
+      }
       const identity = await getSocialIdentity(provider, challenge.data, capabilities, controller.signal);
       if (controller.signal.aborted || identity.status === 'cancelled') { client.current = null; return; }
       if (identity.status === 'error') { setError(socialErrorKey(identity.errorCode)); client.current = null; return; }
@@ -106,10 +116,7 @@ export function useNativeSocialAuth(enabled: boolean) {
   // This retries only the anonymous GET. It never restarts an identity flow,
   // exchanges provider credentials or creates an account.
   const retryAvailability = () => {
-    if (enabled && !checkingAvailability && !active.current && !pending) {
-      setCapabilities(null); setProviders([]); setUnavailable(false); setCheckingAvailability(true);
-      setAvailabilityRevision(value => value + 1);
-    }
+    if (enabled && !checkingAvailability && !active.current && !pending) refreshProviders();
   };
   return { unavailable: enabled && unavailable, checkingAvailability: enabled && checkingAvailability, retryAvailability,
     providers: enabled ? providers : [], pending, busy, error, start, complete, cancel: () => { reset(); setError(null); } };

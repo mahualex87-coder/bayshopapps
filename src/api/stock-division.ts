@@ -35,6 +35,6 @@ export function divisionQuote(data: StockDivision, assignments: Record<string, s
 }
 export function divisionFields(data: StockDivision, assignments: Record<string, string>, comment: string) {
   if (!data.verified || !data.currency || divisionQuote(data, assignments) === null) return fail();
-  const items = data.items.map(item => ({ ...item, partNumber: Number(assignments[item.id]) })).sort((a, b) => a.partNumber - b.partNumber);
+  const items = data.items.map(({ id }) => ({ id, partNumber: Number(assignments[id]) })).sort((a, b) => a.partNumber - b.partNumber);
   return { declarationItems: JSON.stringify(items), priceSemantics: 'original-line-total', comment: comment.trim() };
 }

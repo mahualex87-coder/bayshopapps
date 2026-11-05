@@ -14,10 +14,10 @@ export function shopCountries(warehouses: readonly LiveWarehouse[] | null, addre
   return sortCountryOptions([...countries.values()]);
 }
 
-export function shopOrderParams(shop: DirectoryShop) {
+export function shopOrderContext(shop: DirectoryShop) {
   return {
-    ...(shop.directoryVerified ? { shopId: shop.id, ...(shop.countryCode ? { shopCountryCode: shop.countryCode } : {}) } : {}),
-    ...(shop.storageId ? { storageId: shop.storageId } : {}),
+    ...(shop.directoryVerified ? { selectedShop: { id: shop.id, ...(shop.countryCode ? { countryCode: shop.countryCode } : {}) } } : {}),
+    ...(shop.storageId ? { initialStorageId: shop.storageId } : {}),
   };
 }
 

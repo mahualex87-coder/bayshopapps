@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { shopBrowseReader } from '../src/features/shops/shop-browse-cache.ts';
-import { shopCountries, shopOrderParams } from '../src/features/shops/shop-list.ts';
+import { shopCountries, shopOrderContext } from '../src/features/shops/shop-list.ts';
 
 const rows = [{ id: '11', countryCode: 'US' }, { id: '22', countryCode: 'RO' }];
 const directory = (shops, verified = true) => ({ shops, verified, matchedShopId: null });
@@ -56,6 +56,6 @@ test('failed requests can retry; expired entries and a new account, session, reg
 
 test('legacy shops use the general order form; versioned shops keep the verified match', () => {
   const shop = { id: '11', countryCode: 'US', storageId: '7' };
-  assert.deepEqual(shopOrderParams({ ...shop, directoryVerified: false }), { storageId: '7' });
-  assert.deepEqual(shopOrderParams({ ...shop, directoryVerified: true }), { shopId: '11', shopCountryCode: 'US', storageId: '7' });
+  assert.deepEqual(shopOrderContext({ ...shop, directoryVerified: false }), { initialStorageId: '7' });
+  assert.deepEqual(shopOrderContext({ ...shop, directoryVerified: true }), { selectedShop: {id: '11', countryCode: 'US'}, initialStorageId: '7' });
 });

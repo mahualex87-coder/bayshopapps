@@ -44,6 +44,24 @@ test('undeployed public route leaves email usable; retry makes GET only then ena
   assert(h.calls.filter(c=>c[0]==='http').every(c=>c[1]==='GET'&&c[3].headers.Bearer===undefined));h.unmount();
 });
 
+test('a provider switched off after the capability read disappears without restarting the sign-in flow', async () => {
+  let reads = 0;
+  const h = harness(async (_url, options) => {
+    if (options.method === 'GET') return ok(++reads === 1 ? caps : { ...caps, providers: { ...caps.providers, apple: { enabled: false, clientId: null } } });
+    return new Response(JSON.stringify({ code: 503, error: true, errorCode: 'provider_unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  });
+  let view = await h.flush();
+  await view.start('apple');
+  h.render();
+  view = await h.flush();
+  assert.equal(reads, 2);
+  assert.deepEqual(Array.from(view.providers), ['google']);
+  await view.start('apple');
+  assert.equal(h.calls.filter(c => c[0] === 'http' && c[1] === 'POST').length, 1);
+  assert.equal(h.calls.some(c => c[0] === 'identity' || c[0] === 'adopt'), false);
+  h.unmount();
+});
+
 test('new Google or Apple identity must confirm provider email, first/last name, phone and terms before account completion',async()=>{
   for(const provider of ['apple','google']){
     const h=harness(async(_url,options)=>{

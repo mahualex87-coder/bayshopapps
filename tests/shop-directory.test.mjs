@@ -5,6 +5,14 @@ import { shopCategories, shopPage } from '../src/features/shops/shop-list.ts';
 
 const shop = { id: '43', title: 'A &amp; B', url: 'https://shop.example/ro/', active: true, storageId: '12', countryCode: 'RO', countryTitle: 'România', currency: 'ron', commissionPercent: '0', commissionMin: '0.00', commissionMax: '30.25', commissionCurrency: 'ron', shortDescription: '<p>Condiții &icirc;n RON</p>', categories: [{ id: '8', title: 'Casă &amp; grădină' }] };
 const directory = (rows = [shop], matchedShopId = null) => ({ version: 1, shops: rows, matchedShopId });
+test('directory v1 accepts an empty authorized market and keeps unknown localized titles and commission bounds absent', () => {
+  const list = planShopDirectoryRead({ kind: 'shops.list', countryCode: 'RO' });
+  assert.deepEqual(list.normalize(directory([])), { verified: true, shops: [], matchedShopId: null });
+  const [entry] = list.normalize(directory([{ ...shop, countryTitle: null, commissionMin: null, commissionMax: null }])).shops;
+  assert.equal(entry.countryTitle, null);
+  assert.equal(entry.commissionMin, null);
+  assert.equal(entry.commissionMax, null);
+});
 test('a missing translation in the legacy catalogue does not hide the other shops', () => {
   const missing = { id: '12', title: null, url: '', commissionPercent: '1', commissionMin: '1.25', commissionMax: '1' };
   const named = { ...missing, id: '13', title: '24', url: 'https://shop.example' };
@@ -72,11 +80,12 @@ test('selected-shop service preflight rechecks matching before any cart write an
   const { LiveAccountService } = await import('../src/api/service.ts');
   const { API_ORIGIN } = await import('../src/api/client.ts');
   const { cartItemFields } = await import('../src/api/operations-contracts.ts');
-  const now = 1790000000000; let matched = null; let reads = 0; let writes = 0;
-  const input = { storage_id: '12', url: 'https://shop.example/ro/item', title: 'Product', price: '10.00', quantity: 1, shipping: '0', selectedShop: { id: '43', countryCode: 'RO' } };
+  const now = 1790000000000; let matched = null; let currency = 'RON'; let reads = 0; let writes = 0;
+  const input = { storage_id: '12', url: 'https://shop.example/ro/item', title: 'Product', price: '10.00', quantity: 1, shipping: '0', expectedMarket: {countryCode: 'RO', currency: 'RON'}, selectedShop: { id: '43', countryCode: 'RO' } };
   assert.equal(Object.hasOwn(cartItemFields(input), 'selectedShop'), false);
+  assert.equal(Object.hasOwn(cartItemFields(input), 'expectedMarket'), false);
   const service = new LiveAccountService(async (path, options) => {
-    if (path.startsWith('/api/cart-link/')) return { storageList: [{ storage_id: '12', countryCode: 'RO', countryTitle: 'România', currency: 'RON' }], storage_id: '12', shipping: '0' };
+    if (path.startsWith('/api/cart-link/')) return { storageList: [{ storage_id: '12', countryCode: 'RO', countryTitle: 'România', currency }], storage_id: '12', shipping: '0' };
     if (path.startsWith('/api/shops?')) { reads++; const params = new URL(path, API_ORIGIN).searchParams; assert.equal(params.get('id'), '43'); assert.equal(params.get('active'), '1'); return directory([shop], matched); }
     if (options.write) { writes++; assert.equal(Object.hasOwn(options.body || {}, 'selectedShop'), false); return { code: 200, error: false, message: 'Ok' }; }
     if (path === '/api/auth') return { id: '7', name: 'Synthetic' };
@@ -89,6 +98,22 @@ test('selected-shop service preflight rechecks matching before any cart write an
   await service.start();
   const rejected = await service.mutate({ kind: 'cart.create', input });
   assert.equal(rejected.ok, false); assert.equal(rejected.error, 'shops.urlMismatch'); assert.equal(writes, 0);
-  matched = '43'; const saved = await service.mutate({ kind: 'cart.create', input });
+  matched = '43'; currency = 'EUR';
+  const changed = await service.mutate({ kind: 'cart.create', input });
+  assert.equal(changed.ok, false); assert.equal(changed.error, 'zara.market'); assert.equal(writes, 0);
+  currency = 'RON'; const saved = await service.mutate({ kind: 'cart.create', input });
   assert.equal(saved.ok, true); assert.equal(reads, 2); assert.equal(writes, 1);
+});
+
+test('personal, standard and absent commission are presented distinctly on the shop card and detail', async () => {
+  const {shopCommissionLines}=await import('../src/features/shops/shop-commission.ts');
+  assert.deepEqual(shopCommissionLines(null,null), []);
+  assert.deepEqual(shopCommissionLines(null,10), [{label:'shops.publicPercent',rate:10}]);
+  const legacy=normalizeShopDirectory([{id:'4',title:'Zara',commissionPercent:'0'}],'RO').shops[0];
+  assert.deepEqual(shopCommissionLines(legacy.commissionPercent,legacy.publicCommissionPercent), [{label:'shops.accountNoPercent',rate:null}]);
+  const member=normalizeShopDirectory(directory([{...shop,commissionPercent:'0.0001',publicCommissionPercent:'10'}]),'RO').shops[0];
+  assert.deepEqual(shopCommissionLines(member.commissionPercent,member.publicCommissionPercent),
+    [{label:'shops.accountPercent',rate:0.0001},{label:'shops.publicPercent',rate:10}]);
+  assert.deepEqual(shopCommissionLines(10,10), [{label:'shops.accountPercent',rate:10}]);
+  assert.deepEqual(shopCommissionLines(0,10), [{label:'shops.accountNoPercent',rate:null},{label:'shops.publicPercent',rate:10}]);
 });

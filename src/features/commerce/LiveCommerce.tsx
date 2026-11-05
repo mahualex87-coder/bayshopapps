@@ -37,7 +37,7 @@ function CartEditor({ warehouse, item, onSaved, onClose, onCheck }: { warehouse:
   const save = async () => {
     if (!live.canMutate || unknown) return;
     setError(null); setErrors({});
-    const input: CartItemInput = { storage_id: warehouse.id, ...values, url: normalizeUserUrl(values.url), price: values.price.trim().replace(',', '.'), shipping: values.shipping.trim().replace(',', '.'), ...(item?.comment == null && values.comment === initial.comment ? { comment: undefined } : {}) };
+    const input: CartItemInput = { storage_id: item?.storageId ?? warehouse.id, ...values, url: normalizeUserUrl(values.url), price: values.price.trim().replace(',', '.'), shipping: values.shipping.trim().replace(',', '.'), ...(item?.comment == null && values.comment === initial.comment ? { comment: undefined } : {}) };
     try { cartItemFields(input); }
     catch (error) { setError('errors.validation'); if (error instanceof OperationValidationError) setErrors(error.fieldErrors); return; }
     const result = await live.mutate(item ? { kind: 'cart.edit', id: item.id, input } : { kind: 'cart.create', input });

@@ -1,5 +1,11 @@
 import type { MessageCatalog } from './core';
 export const messagesCommerce: MessageCatalog = {
+  'commerce.payCard': { ro: 'Card prin EuPlătesc', ru: 'Картой через EuPlătesc', en: 'Card via EuPlătesc' },
+  'commerce.orderBillingConsent': { ro: 'Datele introduse se salvează în contul BayShop când continui la plată.', ru: 'Введённые данные сохранятся в аккаунте BayShop при переходе к оплате.', en: 'These billing details will be saved to your BayShop account when you continue to payment.' },
+  'commerce.useOrderBilling': { ro: 'Folosește aceste date', ru: 'Использовать эти данные', en: 'Use these details' },
+  'commerce.orderBillingReady': { ro: 'Se folosesc datele de facturare salvate în cont.', ru: 'Будут использованы платёжные данные из вашего аккаунта.', en: 'Your saved billing details will be used.' },
+  'commerce.paymentServerUpdate': { ro: 'Această metodă va fi disponibilă pentru comenzile din coș după actualizarea serverului BayShop.', ru: 'Этот способ станет доступен для заказов из корзины после обновления сервера BayShop.', en: 'This method will be available for cart orders after the BayShop server update.' },
+  'commerce.paymentUnsupported': { ro: 'Această metodă nu poate fi deschisă pentru comanda selectată.', ru: 'Этот способ оплаты недоступен для выбранного заказа.', en: 'This method is unavailable for the selected order.' },
   'commerce.cart': { ro: 'Coșul meu', ru: 'Моя корзина', en: 'My cart' },
   'commerce.cartIntro': { ro: 'Produsele salvate în contul BayShop.', ru: 'Товары, сохранённые в аккаунте BayShop.', en: 'Products saved in your BayShop account.' },
   'commerce.orders': { ro: 'Cumpărăturile mele', ru: 'Мои покупки', en: 'My purchases' },
@@ -111,4 +117,11 @@ export const messagesCommerce: MessageCatalog = {
   'commerce.noCarriers': { ro: 'BayShop nu a oferit transportatori pentru acest destinatar și aceste produse. Alege alt destinatar.', ru: 'BayShop не предложил перевозчиков для этого получателя и товаров. Выберите другого получателя.', en: 'BayShop returned no carriers for this recipient and these products. Choose another recipient.' },
   'commerce.noLocalMethods': { ro: 'Nu sunt opțiuni de livrare locală pentru acest transportator. Alege alt transportator.', ru: 'Нет вариантов местной доставки для этого перевозчика. Выберите другого перевозчика.', en: 'No local delivery options are available for this carrier. Choose another carrier.' },
   "commerce.noPaymentMethods": {"ro": "BayShop nu a oferit metode de plată pentru această comandă. Verifică în cabinetul BayShop.", "ru": "BayShop не предложил способов оплаты для этого заказа. Проверьте заказ в кабинете BayShop.", "en": "BayShop returned no payment methods for this order. Check the order in your BayShop account."},
+  'commerce.orderPayAmount': { ro: 'Plătește {amount}', ru: 'Оплатить {amount}', en: 'Pay {amount}' },
+  'commerce.orderPaymentFee': { ro: 'Comision inclus în total: {amount}', ru: 'Комиссия включена в сумму: {amount}', en: 'Fee included in total: {amount}' },
+  'commerce.orderPaymentContextMissing': { ro: 'Condițiile de plată ale acestei comenzi nu sunt disponibile în sesiunea curentă.', ru: 'Условия оплаты этого заказа недоступны в текущем сеансе.', en: 'The payment terms for this order are unavailable in this session.' },
+  'commerce.orderPaymentUnavailable': { ro: 'Starea actuală a comenzii nu permite continuarea plății.', ru: 'Текущий статус заказа не позволяет продолжить оплату.', en: 'Payment cannot continue with the current order status.' },
+  'commerce.orderTerminalNoCode': { ro: 'BayShop nu a comunicat codul de terminal pentru această comandă.', ru: 'BayShop не передал код оплаты в терминале для этого заказа.', en: 'BayShop has not provided a terminal payment code for this order.' },
+  'commerce.orderBalancePending': { ro: 'BayShop verifică plata din sold. Poți verifica aici dacă a fost înregistrată.', ru: 'BayShop проверяет оплату с баланса. Здесь можно узнать, зарегистрирован ли платёж.', en: 'BayShop is checking the balance payment. You can check here whether it was recorded.' },
+  'commerce.orderPaymentChecking': { ro: 'BayShop încă nu a confirmat încasarea. Verifică starea înainte de o altă plată.', ru: 'BayShop ещё не подтвердил поступление средств. Проверьте статус перед повторной оплатой.', en: 'BayShop has not confirmed receipt. Check the status before paying again.' },
 };

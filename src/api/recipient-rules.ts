@@ -1,7 +1,7 @@
 import type { AddressFormats } from './account-operations.ts';
 import { recipientBasicFields, recipientCompanyFields, recipientIdentityFields, recipientScanFields, type RecipientField, type RecipientInput } from './recipient-fields.ts';
 
-export type RecipientCountryRule = { labels: Partial<Record<RecipientField, string>>; zipMask: string | null; addressAlphabet: 'latin' | 'cyrillic' | null; postalCodeRequired: boolean; regionRequired: boolean };
+export type RecipientCountryRule = { labels: Partial<Record<RecipientField | 'scans', string>>; zipMask: string | null; addressAlphabet: 'latin' | 'cyrillic' | null; postalCodeRequired: boolean; regionRequired: boolean };
 
 /** Match the web form's disabled-field behavior. An explicit empty server list
  * means no identity fields; absent metadata retains the legacy editable fields. */
@@ -29,7 +29,7 @@ export function changeRecipientScope(input: RecipientInput, formats: AddressForm
   return next;
 }
 
-export function recipientFieldLabel(formats: AddressFormats, countryId: string, key: RecipientField): string | null {
+export function recipientFieldLabel(formats: AddressFormats, countryId: string, key: RecipientField | 'scans'): string | null {
   return formats.countryRules?.[countryId]?.labels[key] || null;
 }
 

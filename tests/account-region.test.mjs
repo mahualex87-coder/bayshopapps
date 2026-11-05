@@ -2,12 +2,27 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { accountRegionFromPersonalData, accountRegionInterfaceLanguage, accountRegionLanguage, normalizeAccountSettings, normalizeAccountRegion, validateSettingsMutation } from '../src/api/account-settings.ts';
 import { planMutation } from '../src/api/operations-contracts.ts';
+import { normalizePersonalProfileData } from '../src/api/normalize.ts';
 
 const region = { countryId: '143', languageId: '2', countries: [
   { id: '143', title: 'Moldova', code: 'MD', languages: [{ id: '1', title: 'Română', code: 'ro' }, { id: '2', title: 'Русский', code: 'ru' }] },
   { id: '181', title: 'România', code: 'RO', languages: [{ id: '1', title: 'Română', code: 'ro' }, { id: '3', title: 'English', code: 'en' }] },
 ] };
 const raw = { capabilities: { accountRegionSave: true }, birthday: { value: null, editable: false }, language: { id: '2', options: region.countries[0].languages }, region, billing: { fields: {}, countries: [] }, identity: { revision: 'a'.repeat(64), files: [], maxFiles: 3, maxBytes: 26214400, allowedMimeTypes: ['application/pdf'] } };
+test('an account without a destination can select its first country from the settings returned by the API', () => {
+  const personal = { name: 'Test', countries: region.countries, languages: {} };
+  assert.equal(normalizePersonalProfileData(personal, {}).countryId, undefined);
+  assert.throws(() => accountRegionFromPersonalData(personal));
+  for (const countryId of ['0', 0, '', null]) {
+    assert.equal(normalizePersonalProfileData({ ...personal, countryId }, {}).countryId, null);
+    assert.equal(accountRegionFromPersonalData({ ...personal, countryId }).countryId, '');
+    const settings = normalizeAccountSettings({ ...raw, region: { ...region, countryId } });
+    assert.equal(settings.region.countryId, '');
+    assert.deepEqual(settings.region.countries.map(c => c.id), ['143','181']);
+    validateSettingsMutation({ kind: 'settings.region.save', countryId: '181', languageId: '3' }, settings);
+    assert.throws(() => validateSettingsMutation({ kind: 'settings.region.save', countryId: '', languageId: '3' }, settings));
+  }
+});
 test('region retains only friendly display values and exact dependent language IDs', () => {
   const data = normalizeAccountRegion({ ...region, countries: region.countries.map(country => ({ ...country, phoneLength: 8, availableLanguageCodes: 'hidden', internal: 'hidden' })) });
   assert.deepEqual(data.countries.map(country => [country.title, country.code, country.languages.map(language => language.id)]), [['Moldova', 'MD', ['1', '2']], ['România', 'RO', ['1', '3']]]);

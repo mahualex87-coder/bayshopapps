@@ -3,7 +3,7 @@
     "name": "BayShop",
     "slug": "bayshop",
     "owner": "air-post-srl",
-    "version": "0.6.21",
+    "version": "0.6.26",
     "orientation": "portrait",
     "scheme": "bayshopdemo",
     "userInterfaceStyle": "automatic",

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeCartLinkData, normalizeCartSavedData } from '../src/api/cart-link.ts';
+import { cartMarketMatches, normalizeCartLinkData, normalizeCartSavedData } from '../src/api/cart-link.ts';
 import { normalizeCartList, normalizeCartItem } from '../src/api/operations-normalize.ts';
 import { planRead, planMutation, cartProductUrl } from '../src/api/operations-contracts.ts';
 const storage = { storage_id: '14', countryCode: 'US', countryTitle: 'United States', currency_sign: '$', currency: 'usd' };
@@ -59,8 +59,14 @@ test('cart writes require fresh safe-server metadata and never dispatch on the l
   assert.equal(rejected.error, 'cartLink.serverUpdateRequired'); assert.equal(rejected.outcome, 'rejected'); assert.equal(writes, 0);
   supported = true;
   assert.equal((await service.mutate(command)).data.id, '987'); assert.equal(reads, 2); assert.equal(writes, 1);
+  const edit = { ...command, kind: 'cart.edit', id: '987' };
+  assert.equal((await service.mutate(edit)).data.id, '987');
+  const moved = await service.mutate({ ...edit, input: { ...edit.input, storage_id: '12' } });
+  assert.equal(moved.error, 'cartLink.currencyChanged'); assert.equal(writes, 2);
+  const wrongAck = await service.mutate({ ...edit, id: '988' });
+  assert.equal(wrongAck.outcome, 'unknown'); assert.equal(writes, 3);
   supported = false;
-  assert.equal((await service.mutate({ ...command, kind: 'cart.edit', id: '987' })).outcome, 'rejected'); assert.equal(writes, 1);
+  assert.equal((await service.mutate(edit)).outcome, 'rejected'); assert.equal(writes, 3);
 });
 
 
@@ -87,6 +93,22 @@ test('root product links retain a path for the legacy PHP shop matcher in both l
   assert.equal(plan.fields.url, 'https://altex.ro/');
 });
 
+test('only a matched Romanian legacy warehouse can use its explicit RON sign in place of a missing ISO field', () => {
+  const romanianMarket = { countryCode: 'RO', currency: 'RON' };
+  const matches = (currencySign, currency, countryCode = 'RO', extra = {}, selectedId = '12') => {
+    const data = normalizeCartLinkData({ storage_id: 12, storageList: [{ storage_id: 12, countryCode, countryTitle: 'Depozit', currency, currency_sign: currencySign }], ...extra });
+    return cartMarketMatches(data, selectedId, romanianMarket);
+  };
+  assert.ok(matches(' rOn ', null));
+  assert.ok(matches('lei', 'ron'));
+  assert.equal(matches('RON', 'EUR'), false);
+  for (const sign of ['lei', 'L', '€', 'MDL', 'RON/lei', '', null]) assert.equal(matches(sign, null), false);
+  assert.equal(matches('RON', null, 'MD'), false);
+  assert.equal(matches('RON', null, 'RO', {}, '11'), false);
+  assert.equal(matches('RON', null, 'RO', { cartWriteSupported: true }), false);
+  assert.equal(matches('RON', null, 'RO', { cartWriteSupported: false }), false);
+});
+
 test('legacy create rechecks the matched warehouse and never permits edit or unknown-shop writes', async () => {
   const { LiveAccountService } = await import('../src/api/service.ts');
   const { API_ORIGIN } = await import('../src/api/client.ts');
@@ -108,10 +130,15 @@ test('legacy create rechecks the matched warehouse and never permits edit or unk
   assert.equal(created.ok, true); assert.equal(created.data.id, null);
   assert.equal(writes.length, 1); assert.equal(writes[0].path, '/api/cart');
   assert.equal(writes[0].write.fields.url, 'https://altex.ro/');
+  const romanianProduct = { ...command, input: { ...command.input, url: 'https://www.zara.com/ro/ro/jacheta-p03411330.html?v1=552297497', expectedMarket: { countryCode: 'RO', currency: 'RON' } } };
+  assert.equal((await service.mutate(romanianProduct)).ok, true);
+  assert.equal(writes[1].path, '/api/cart');
+  storageList[0].currency = 'EUR';
+  assert.equal((await service.mutate(romanianProduct)).error, 'zara.market');
   assert.equal(new URL(lookups[0], API_ORIGIN).searchParams.get('url'), 'https://altex.ro/');
   assert.equal((await service.mutate({ ...command, kind: 'cart.edit', id: '987' })).outcome, 'rejected');
   matched = '14'; assert.equal((await service.mutate(command)).outcome, 'rejected');
   matched = null; assert.equal((await service.mutate(command)).outcome, 'rejected');
-  assert.equal(writes.length, 1);
+  assert.equal(writes.length, 2);
   await service.logout();
 });

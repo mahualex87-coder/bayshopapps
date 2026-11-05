@@ -34,6 +34,22 @@ function create(override = () => undefined) {
   return { service, writes, saved: () => saved };
 }
 
+test('an invalid identity upload is rejected without locking the editor, while a server failure stays unconfirmed', async () => {
+  let status = 400;
+  const { service } = create((path, options) => {
+    if (options.write && path === '/api/member-settings') throw new ApiError(status, 'errors.loadFailed', {}, { outcome: status === 400 ? 'rejected' : 'unknown' });
+  });
+  await service.start();
+  const command = { kind: 'settings.identity.save', revision: fixture().identity.revision, retainedIds: ['scan1'], files: [{ uri: 'file:///test.pdf', name: 'test.pdf', mimeType: 'application/pdf', size: 64 }] };
+  const invalid = await service.mutate(command);
+  assert.equal(invalid.error, 'accountSettings.documentsRejected');
+  assert.equal(invalid.outcome, 'rejected');
+  status = 500;
+  const uncertain = await service.mutate(command);
+  assert.equal(uncertain.error, 'errors.mutationUnknown');
+  assert.equal(uncertain.outcome, 'unknown');
+});
+
 test('settings strict extraction keeps permissions, actual language codes and exact billing values', () => {
   const raw = fixture(); raw.password = 'never retain'; raw.token = 'never retain';
   const data = normalizeAccountSettings(raw);

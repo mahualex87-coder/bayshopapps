@@ -6,7 +6,7 @@ export type ShopCategory = { id: string; title: string };
 export type DirectoryShop = {
   id: string; title: string; url: string | null; countryCode: string | null; countryTitle: string | null;
   storageId: string | null; currency: string | null; commissionPercent: number | null;
-  commissionMin: number | null; commissionMax: number | null; commissionCurrency: string | null;
+  publicCommissionPercent?: number | null; commissionMin: number | null; commissionMax: number | null; commissionCurrency: string | null;
   description: string | null; categories: ShopCategory[]; directoryVerified: boolean;
 };
 export type ShopDirectory = { shops: DirectoryShop[]; verified: boolean; matchedShopId: string | null };
@@ -46,7 +46,7 @@ export function normalizeShopDirectory(raw: unknown, requestedCountry?: string):
     if (!Array.isArray(categories)) throw fail();
     const mapped = categories.map(value => { const c = record(value); const title = text(c.title); if (!title) throw fail(); return { id: id(c.id), title }; });
     if (new Set(mapped.map(c => c.id)).size !== mapped.length) throw fail();
-    shops.push({ id: shopId, title, url: publicShopUrl(row.url), countryCode, countryTitle: text(row.countryTitle), storageId: row.storageId == null ? null : id(row.storageId), currency: code(row.currency, 3), commissionPercent: number(row.commissionPercent), commissionMin: number(row.commissionMin), commissionMax: number(row.commissionMax), commissionCurrency: code(row.commissionCurrency, 3), description: text(row.shortDescription), categories: mapped, directoryVerified: verified });
+    shops.push({ id: shopId, title, url: publicShopUrl(row.url), countryCode, countryTitle: text(row.countryTitle), storageId: row.storageId == null ? null : id(row.storageId), currency: code(row.currency, 3), commissionPercent: number(row.commissionPercent), publicCommissionPercent: verified ? number(row.publicCommissionPercent) : null, commissionMin: number(row.commissionMin), commissionMax: number(row.commissionMax), commissionCurrency: code(row.commissionCurrency, 3), description: text(row.shortDescription), categories: mapped, directoryVerified: verified });
   }
   if (new Set(shops.map(shop => shop.id)).size !== shops.length) throw fail();
   const matchedShopId = envelope?.matchedShopId == null ? null : id(envelope.matchedShopId);

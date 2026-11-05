@@ -51,8 +51,10 @@ export function validBirthday(value: unknown): value is string {
 }
 export function normalizeAccountRegion(raw: unknown): AccountRegion {
   const row = object(raw);
-  const countryId = string(row.countryId); const languageId = row.languageId == null || row.languageId === '' ? null : string(row.languageId);
-  if (!/^[1-9]\d*$/.test(countryId) || languageId !== null && !/^[1-9]\d*$/.test(languageId) || !Array.isArray(row.countries)) throw new ApiContractError('țara și limba contului');
+  const currentCountry = string(row.countryId);
+  const countryId = currentCountry === '0' ? '' : currentCountry;
+  const languageId = row.languageId == null || row.languageId === '' ? null : string(row.languageId);
+  if (!Object.hasOwn(row, 'countryId') || countryId !== '' && !/^[1-9]\d*$/.test(countryId) || languageId !== null && !/^[1-9]\d*$/.test(languageId) || !Array.isArray(row.countries)) throw new ApiContractError('țara și limba contului');
   const countries = row.countries.map(entry => {
     const country = object(entry); const option = serverOptions([country])[0];
     if (!option.title || !Array.isArray(country.languages)) throw new ApiContractError('opțiunile țării');
@@ -65,6 +67,7 @@ export function normalizeAccountRegion(raw: unknown): AccountRegion {
  * availability for another country. No legacy push token is fabricated. */
 export function accountRegionFromPersonalData(raw: unknown): AccountRegion {
   const row = object(raw); const countryId = string(row.countryId);
+  if (!Object.hasOwn(row, 'countryId')) throw new ApiContractError('țara și limba contului');
   return normalizeAccountRegion({ countryId, languageId: row.languageId, countries: serverOptions(row.countries).map(country => ({ ...country, languages: country.id === countryId ? serverOptions(row.languages) : [] })) });
 }
 export function accountRegionLanguage(region: AccountRegion, countryId: string, previous: string): string {

@@ -16,6 +16,7 @@ import { RemotePageButton } from '@/features/content/RemotePageButton';
 import { useOperationView } from '@/features/live/forms/useOperationView';
 import { GlassSurface } from '@/navigation/GlassSurface';
 import { useVisualPreferences } from '@/navigation/accessibility';
+import { OrderPaymentPanel } from './OrderPaymentPanel';
 import { OrderCancellationCard } from '@/features/refunds/OrderCancellationCard';
 
 function PurchaseRow({ label, value }: { label: string; value: string | null }) {
@@ -172,5 +173,12 @@ function PurchaseDetails({ order }: { order: PurchaseDetail }) {
 }
 export function LivePurchaseDetailScreen({ id }: { id: string }) {
   const { t } = useI18n(); const result = useOperationView({ kind: 'purchases.detail', id });
-  return <Screen title={t('commerce.order')}><ResourceStatus resource={result.resource} onRefresh={() => { void result.refresh(); }} />{result.resource.data?.id === id && <PurchaseDetails order={result.resource.data} />}{result.resource.data && result.resource.data.id !== id && <Notice error>{t('commerce.notFound')}</Notice>}<OrderCancellationCard id={id} onConfirmed={() => { void result.refresh(); }} /></Screen>;
+  const order = result.resource.data?.id === id ? result.resource.data : null;
+  return <Screen title={t('commerce.order')}>
+    <ResourceStatus resource={result.resource} onRefresh={() => { void result.refresh(); }} />
+    {order?.paymentStatus === 'unpaid' && <OrderPaymentPanel orderId={id} />}
+    {order && <PurchaseDetails order={order} />}
+    {result.resource.data && !order && <Notice error>{t('commerce.notFound')}</Notice>}
+    <OrderCancellationCard id={id} onConfirmed={() => { void result.refresh(); }} />
+  </Screen>;
 }

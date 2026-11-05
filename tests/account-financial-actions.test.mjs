@@ -55,9 +55,21 @@ test('malformed financial fields, duplicate identities and contradictory IDs are
   assert.throws(() => normalizeOrderCancellation([...order(), ...order()], '123'));
 });
 
-test('amount validation accepts decimal comma, preserves cents, rejects fractions, zero and overdrafts', () => {
+test('refund preview and submission round decimal amounts half up as the server does', () => {
   assert.equal(refundAmount(' 001,20 '), '1.20'); assert.equal(refundAmount('0.01'), '0.01');
-  for (const value of ['0', '-1', '1.001', '1e2', '1,2.3', '1 000', 'Infinity', '']) assert.throws(() => refundAmount(value));
+  for (const [input, expected] of [['76.98999999999999', '76.99'], ['1,005', '1.01'], ['1.001', '1.00'], ['0.005', '0.01'], ['9.999', '10.00']]) {
+    assert.equal(refundAmount(input), expected);
+    const data = normalizeRefundOverview(fixture());
+    const cmd = create(data, { amount: input });
+    const quote = quoteRefund(data, cmd);
+    assert.equal(quote.amount, expected);
+    assert.equal(planFinancialMutation(cmd).fields.amount, expected);
+    validateFinancialMutation(cmd, data);
+  }
+  for (const value of ['0', '0.004', '-1', '1e2', '1,2.3', '1 000', 'Infinity', '1000000000.005', '']) assert.throws(() => refundAmount(value));
+  const base = fixture();
+  const balance = normalizeRefundOverview({ ...base, memberBalance: [{ ...base.memberBalance[2], amount: '76.98999999999999' }] });
+  assert.equal(quoteRefund(balance, { currencyId: '1', refundTypeId: '8', amount: '76.98999999999999' }).amount, '76.99');
   const data = normalizeRefundOverview(fixture());
   assert.throws(() => quoteRefund(data, { currencyId: '4', refundTypeId: '8', amount: '20' }), { key: 'refunds.insufficientFunds' });
   assert.throws(() => quoteRefund(data, { currencyId: '2', refundTypeId: '8', amount: '0.01' }), { key: 'refunds.insufficientFunds' });

@@ -243,6 +243,15 @@ test('profile language metadata is retained without guessing an account-language
   assert.equal(new ApiContractError('unrecognized-field').key, 'errors.contract');
 });
 
+test('public shop catalogue uses the account country matched by ID, independent of display language', () => {
+  const profile = normalizeProfileData({ id: '7' });
+  const countries = [{ id: '10', code: 'MD' }, { id: '20', code: 'ro' }];
+  const updated = normalizePersonalProfileData({ countryId: '20', countries, languageCode: 'ru' }, profile);
+  assert.equal(updated.countryCode, 'RO');
+  assert.equal(normalizePersonalProfileData({ countryId: '11', countries }, updated).countryCode, null);
+  assert.equal(normalizePersonalProfileData({ countryId: '10', countries: [{ id: '10', code: 'rus' }] }, updated).countryCode, null);
+});
+
 test('address semantic keys never replace or translate exact postal values', () => {
   const [address] = normalizeWarehouseAddressesData([{ countriesCode: 'US', countryTitle: 'США', addresses: { storage: [{ id: '1', userName: 'Иван Test', companyName: 'Example Inc.', address1: '  1 Parcel Street ', address2: 'ST M0007', city: 'Newark', state: 'DE', zipCode: '00198', country: 'United States', phone: '+1 000 000' }], private: [] } }]);
   assert.equal(address.title, 'США');

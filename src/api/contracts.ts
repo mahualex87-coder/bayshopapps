@@ -10,6 +10,7 @@ export type LiveProfile = {
   phone: string | null;
   /** Server profile preferences; these do not change the app's local language. */
   countryId?: string | null;
+  countryCode?: string | null;
   languageId?: string | null;
   languageCode?: string | null;
   languages?: Record<string, string> | null;

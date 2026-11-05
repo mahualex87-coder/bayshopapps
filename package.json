@@ -1,7 +1,7 @@
 {
   "name": "bayshop-mobile",
   "main": "./index.js",
-  "version": "0.6.21",
+  "version": "0.6.26",
   "dependencies": {
     "@config-plugins/react-native-blob-util": "^14.0.2",
     "@config-plugins/react-native-pdf": "^14.0.2",

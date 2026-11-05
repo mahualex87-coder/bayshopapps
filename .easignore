@@ -59,3 +59,8 @@ example/
 credentials/
 google-services*.json
 GoogleService-Info*.plist
+
+!modules/bayshop-shop-browser/android/
+!modules/bayshop-shop-browser/android/build.gradle
+!modules/bayshop-shop-browser/android/src/
+!modules/bayshop-shop-browser/android/src/**

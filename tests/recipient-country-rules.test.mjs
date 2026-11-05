@@ -30,6 +30,17 @@ test('country identity requirements drive visible fields without a hardcoded cou
  assert.equal(visibleRecipientFields({...person,countryId:''},formats).has('scan1'),false,'do not ask for identity documents before choosing a destination');
 });
 
+test('the server label for scans is scoped to the country and does not require uploads by itself',()=>{
+ const formats=addressFormats({
+   countries:{10:'A',20:'B'},recipientRequiredFields:{10:{person:['scans'],company:[]},20:{person:[],company:[]}},
+   recipientCountryRules:Object.fromEntries(['10','20'].map(id=>[id,{labels:{scans:id==='10'?'<b>Act de identitate</b>':'Document'},postalCodeRequired:true,regionRequired:true,zipMask:null,addressAlphabet:'latin'}])),
+ });
+ assert.equal(recipientFieldLabel(formats,'10','scans'),'Act de identitate');
+ assert.equal(recipientFieldLabel(formats,'20','scans'),'Document');
+ assert(visibleRecipientFields({...person,countryId:'10'},formats).has('scan1'));
+ assert(!visibleRecipientFields({...person,countryId:'20'},formats).has('scan1'));
+});
+
 test('hidden identity and company values are neither submitted nor validated after a country/type change',()=>{
  const stale={...person,passportNumber:'old',passportBirthDate:'not-a-date',passportIssuedCountryId:'999',scan1:'https://external.invalid/stale.pdf',companyCif:'hidden company'};
  const result=validateRecipient(stale,formats,false,{initial:stale});

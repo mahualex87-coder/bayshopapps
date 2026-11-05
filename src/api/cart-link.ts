@@ -5,6 +5,14 @@ export type CartLinkStorage = { id: string; countryCode: string; countryTitle: s
 export type CartLinkShop = { id: string; title: string; storageId: string; isComplex: boolean };
 export type CartLinkWriteMode = 'verified' | 'legacy-matched' | 'unavailable';
 export type CartLinkData = { canSave: boolean; writeMode: CartLinkWriteMode; storages: CartLinkStorage[]; storageId: string | null; shipping: number | null; shop: CartLinkShop | null; resolution: 'identified' | 'unregistered' | 'unknown' };
+export function cartMarketMatches(lookup: CartLinkData, storageId: string, market: { countryCode: string; currency: string }): boolean {
+  const storage = lookup.storages.find(item => item.id === storageId);
+  if (!storage || lookup.storageId !== storageId || storage.countryCode !== market.countryCode) return false;
+  if (storage.currency !== null) return storage.currency === market.currency;
+  // The legacy Romanian shop lookup returns the ISO code only in currency_sign.
+  return lookup.writeMode === 'legacy-matched' && market.countryCode === 'RO' && market.currency === 'RON'
+    && storage.currencySign?.trim().toUpperCase() === 'RON';
+}
 export type CartSaved = { id: string | null; uid: string | null; shopId: string | null; storageId: string | null; countryCode: string | null; status: string | null };
 const fail = () => new ApiContractError('produsul din link');
 const row = (value: unknown): Record<string, unknown> => { if (!value || typeof value !== 'object' || Array.isArray(value)) throw fail(); return value as Record<string, unknown>; };
@@ -19,7 +27,7 @@ export function normalizeCartLinkData(value: unknown): CartLinkData {
   const storages = data.storageList.map(value => {
     const item = row(value), code = country(item.countryCode), title = text(item.countryTitle), currency = text(item.currency)?.toUpperCase() ?? null;
     if (!code || !title || currency !== null && !/^[A-Z]{3}$/.test(currency)) throw fail();
-    return { id: requiredId(item.storage_id), countryCode: code, countryTitle: serverText(title), currency, currencySign: text(item.currency_sign) };
+    return { id: requiredId(item.storage_id), countryCode: code, countryTitle: serverText(title), currency, currencySign: text(item.currency_sign)?.trim() || null };
   });
   if (new Set(storages.map(value => value.id)).size !== storages.length) throw fail();
   const storageId = id(data.storage_id);

@@ -4,9 +4,11 @@ import { normalizeAuthData, normalizeCountersData, normalizeCurrentBalancesData,
 import { isLanguage, type Language } from '../i18n/core.ts';
 import { emptyMutation, MutationInputError, type MutationResult, type MutationState } from './mutations.ts';
 import { planMutation, planRead, type MutationCommand, type ReadCommand, type ReadResult } from './operations-contracts.ts';
-import { normalizeWaitingDetail } from './operations-normalize.ts';
+import { balanceOrderPlan, orderQuoteRevision, verifyOrderPaymentDetails, type OrderPaymentStartInput } from './order-payment.ts';
+import { checkoutItems, orderBillingMissing, type CheckoutPayments, type CreatedOrder } from './checkout-normalize.ts';
+import { normalizeWaitingDetail, warehouseForStorage } from './operations-normalize.ts';
 import { normalizeParcelReview, validateReviewAgainstCurrent } from './parcel-review.ts';
-import { normalizeCartLinkData } from './cart-link.ts';
+import { cartMarketMatches, normalizeCartLinkData } from './cart-link.ts';
 import { planShopDirectoryRead, requireShopMatch } from './shop-directory.ts';
 import { planFinancialRead, validateFinancialMutation } from './account-financial-actions.ts';
 import { planOutgoingServicesRead, validateOutgoingServiceMutation } from './outgoing-services.ts';
@@ -69,6 +71,9 @@ export class LiveAccountService {
   private dispatchedMutation: AbortController | null = null;
   // Quotes are account/locale-scoped ephemeral data. Neither provider actions
   // nor wallet tokens enter snapshots, persistent storage, or resource caches.
+  private orderPaymentContexts = new Map<string, Pick<OrderPaymentStartInput,'created'|'quote'>>();
+  getOrderPaymentContext = (orderId: string) => this.orderPaymentContexts.get(orderId) ?? null;
+  private dispatchedBalanceCarts = new Set<string>();
   private paymentQuotes = new Map<string, { quote: PaymentQuote; selectionRevision: string }>();
   private dispatchedPaymentQuotes = new Set<string>();
   private dispatchedPaymentAttempts = new Set<string>();
@@ -94,7 +99,7 @@ export class LiveAccountService {
     const page = resource.data === null ? { ...previous, items: null } : localParcelPage(resource.data as LiveParcel[], previous.query, resource.updatedAt, { language: this.language, ...(stage === 'received' ? { overallTotal: previous.overallTotal ?? undefined, countries: previous.countries } : {}) });
     this.emit({ resources, parcelPages: { ...this.snapshot.parcelPages, [stage]: { ...page, loading: resource.loading, error: resource.error, updatedAt: resource.updatedAt } } });
   }
-  private cancel() { this.generation++; this.paymentQuotes.clear(); this.receivedRequest?.abort(); this.receivedRequest = null; this.requests.forEach(controller => controller.abort()); this.requests.clear(); this.versions = {}; }
+  private cancel() { this.generation++; this.paymentQuotes.clear(); this.orderPaymentContexts.clear(); this.dispatchedBalanceCarts.clear(); this.receivedRequest?.abort(); this.receivedRequest = null; this.requests.forEach(controller => controller.abort()); this.requests.clear(); this.versions = {}; }
   setParcelQuery = (stage: LiveParcelStage, patch: Partial<ParcelQuery>): void => {
     if (!this.session || !parcelStages.includes(stage)) return;
     const previous = this.snapshot.parcelPages[stage];
@@ -222,6 +227,8 @@ export class LiveAccountService {
     this.emit({ mutation: { pending: true, operation: command.kind, error: null, outcome: null } });
     let writeStarted = false;
     let legacyPaymentCurrency: string | null = null;
+    let orderQuote: CheckoutPayments | null = null;
+    let balanceCartKey: string | null = null;
     let preparedCardPaymentId: string | null = null;
     const advanceRegionScope = () => {
       // A confirmed or uncertain region write can change every catalog. Keep
@@ -233,6 +240,38 @@ export class LiveAccountService {
       this.emit({ accountRevision: this.snapshot.accountRevision + 1, parcelPages: emptyParcelPages() });
     };
     try {
+      if (command.kind === 'order.create') {
+        const input = command.input;
+        if (!input.reviewedPayments) throw new ApiError(0,'payments.quoteChanged');
+        orderQuote = await this.readView({kind:'checkout.payments',carts:input.carts},{signal:controller.signal});
+        if (orderQuoteRevision(orderQuote,input.paymentType) !== orderQuoteRevision(input.reviewedPayments,input.paymentType)) throw new ApiError(0,'payments.quoteChanged');
+        if (input.paymentType === 'balance' && orderQuote.orderAcknowledgementVersion !== 1) {
+          const carts = checkoutItems(input.carts, await Promise.all(input.carts.map(id => this.readView({kind:'cart.detail',id},{signal:controller.signal}))));
+          // The installed endpoint accepts only current cart UIDs. Fetch the actual basket as
+          // well: old detail documents do not expose the item's payment status.
+          const scope=await this.readView({kind:'warehouses.read'},{signal:controller.signal});
+          const storage = warehouseForStorage(scope,carts[0].storageTitle,carts[0].storageId);
+          if (!storage) throw new ApiError(0,'payments.quoteChanged');
+          const available=await this.readView({kind:'cart.list',countryCode:storage.code.toUpperCase()},{signal:controller.signal});
+          const selected = checkoutItems(input.carts, available.filter(item=>input.carts.includes(item.id)));
+          if (carts.some((item, i)=>!selected[i].shopId || selected[i].uid!==item.uid || selected[i].currency?.toUpperCase()!==orderQuote!.currency)) throw new ApiError(0,'payments.quoteChanged');
+          plan=balanceOrderPlan(plan,carts,orderQuote);
+          balanceCartKey = JSON.stringify([...input.carts].sort());
+          if (this.dispatchedBalanceCarts.has(balanceCartKey)) throw new ApiError(0,'errors.mutationUnknown');
+        }
+      }
+      if (command.kind === 'orders.payment.start') {
+        const {created,quote,billingInput}=command.input;
+        const saved=this.getOrderPaymentContext(created.orders[0]?.id);
+        if (!saved || JSON.stringify(saved.created)!==JSON.stringify(created) || orderQuoteRevision(saved.quote,created.type)!==orderQuoteRevision(quote,created.type)) throw new ApiError(0,'payments.quoteChanged');
+        const details=await Promise.all(created.orders.map(async order=>{
+          const rows = await this.readView({kind:'order.detail',id:order.id},{signal:controller.signal});
+          if (rows.length!==1 || rows[0].id!==order.id) throw new ApiError(0,'payments.quoteChanged');
+          return rows[0];
+        }));
+        verifyOrderPaymentDetails(command.input,details);
+        if (created.type!=='paypal' && !billingInput && orderBillingMissing(created.type,await this.readView({kind:'orders.payment.billing'},{signal:controller.signal}))) throw new ApiError(0,'payments.billingMissing');
+      }
       if (command.kind === 'refund.create' || command.kind === 'refund.cancel' || command.kind === 'order.cancel') {
         const lookup = command.kind === 'order.cancel' ? planFinancialRead({ kind: 'order.cancellation', id: command.id }) : planFinancialRead({ kind: 'refunds.read' });
         const current = lookup.normalize(await this.request(lookup.path, context, { signal: controller.signal }));
@@ -265,6 +304,10 @@ export class LiveAccountService {
         if (!this.isCurrent(context) || controller.signal.aborted) throw new ApiError(0, 'errors.cancelled');
         const legacyCreate = command.kind === 'cart.create' && current.writeMode === 'legacy-matched' && current.storageId === command.input.storage_id;
         if (current.writeMode !== 'verified' && !legacyCreate) throw new ApiError(0, 'cartLink.serverUpdateRequired');
+        if (current.storageId !== command.input.storage_id) throw new ApiError(0, 'cartLink.currencyChanged');
+        if (command.input.expectedMarket && !cartMarketMatches(current, command.input.storage_id, command.input.expectedMarket)) {
+          throw new ApiError(0, 'zara.market');
+        }
         if (command.input.selectedShop) {
           const match = planShopDirectoryRead({ kind: 'shops.match', ...command.input.selectedShop, url: command.input.url });
           const directory = match.normalize(await this.request(match.path, context, { signal: controller.signal }));
@@ -323,6 +366,7 @@ export class LiveAccountService {
         this.dispatchedPaymentAttempts.add(command.input.idempotencyKey);
         this.paymentQuotes.delete(command.input.quoteId);
       }
+      if (balanceCartKey) this.dispatchedBalanceCarts.add(balanceCartKey);
       writeStarted = true;
       this.dispatchedMutation = controller;
       const raw = await this.transport(plan.path, { token: session.token, signal: controller.signal, language: context.language, write: plan, responseMode: plan.responseMode });
@@ -332,6 +376,13 @@ export class LiveAccountService {
       // Each operation confirms its own acknowledgement; HTTP 200 alone is not a save.
       if (!plan.normalize) throw new ApiError(0, 'errors.contract', {}, { outcome: 'unknown' });
       const data = plan.normalize(raw);
+      if (command.kind === 'order.create' && orderQuote) {
+        const created=data as CreatedOrder;
+        for (const order of created.orders) {
+          if (this.orderPaymentContexts.size >= 64) this.orderPaymentContexts.delete(this.orderPaymentContexts.keys().next().value!);
+          this.orderPaymentContexts.set(order.id,{created,quote:orderQuote});
+        }
+      }
       if (command.kind === 'payments.legacy.start') {
         const result = data as LegacyPaymentStartResult;
         if (result.action.kind === 'form' && result.action.fields.curr.toUpperCase() !== legacyPaymentCurrency) throw new LegacyPaymentPreparationError(result.paymentId, 'currency');
@@ -354,7 +405,10 @@ export class LiveAccountService {
       } : undefined;
       if (!this.isCurrent(context)) return { ok: false, error: writeStarted ? 'errors.mutationUnknown' : 'errors.cancelled', outcome: writeStarted ? 'unknown' : 'rejected' };
       const outcome = !writeStarted ? 'rejected' : command.kind === 'payments.legacy.start' ? 'unknown' : error instanceof ApiError ? error.outcome ?? 'unknown' : 'unknown';
-      const key = cardPreparation ? 'payments.checkoutFailed' : outcome === 'unknown' ? 'errors.mutationUnknown' : errorMessage(error);
+      const rejectedIdentity = command.kind === 'settings.identity.save' && writeStarted && outcome === 'rejected' && error instanceof ApiError && error.status === 400;
+      if (balanceCartKey && outcome==='rejected') this.dispatchedBalanceCarts.delete(balanceCartKey);
+      const failureKey = rejectedIdentity ? 'accountSettings.documentsRejected' : errorMessage(error);
+      const key = cardPreparation ? 'payments.checkoutFailed' : outcome === 'unknown' ? 'errors.mutationUnknown' : failureKey;
       const fieldErrors = error instanceof ApiError || error instanceof MutationInputError ? error.fieldErrors : undefined;
       if (error instanceof ApiError && error.status === 401) { await this.logout('errors.sessionExpired'); return { ok: false, error: 'errors.sessionExpired', outcome: command.kind === 'payments.legacy.start' && writeStarted ? 'unknown' : 'rejected' }; }
       // Refreshing after an uncertain result is read-only. Never replay the write.

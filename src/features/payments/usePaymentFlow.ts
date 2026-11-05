@@ -27,7 +27,7 @@ class PaymentPresentationError extends ApiError {
 /** iOS inactive is a temporary interruption, not necessarily backgrounding.
  * Keep the one prepared checkout in memory and present it only once active.
  * A real background transition, unmount or timeout discards the handoff. */
-function waitForPaymentForeground(signal: AbortSignal, deadline: number): Promise<void> {
+export function waitForPaymentForeground(signal: AbortSignal, deadline: number): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

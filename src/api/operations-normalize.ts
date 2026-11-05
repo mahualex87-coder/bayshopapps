@@ -164,7 +164,9 @@ export type StockServicePrices = { currency: string | null; photos: number | nul
 export function normalizeStockServicePrices(data: unknown): StockServicePrices {
   const item = row(data);
   const details: StockServicePrices['details'] = {};
-  const metadata = item.serviceDetails == null ? {} : row(item.serviceDetails);
+  // Earlier servers encoded an empty PHP map as []; named service entries are an object.
+  const rawDetails = item.serviceDetails;
+  const metadata = rawDetails == null || (Array.isArray(rawDetails) && rawDetails.length === 0) ? {} : row(rawDetails);
   for (const [kind, key] of Object.entries({ photos: 'order_photo', verification: 'order_verification', declaration: 'order_declaration', division: 'order_divide' })) {
     if (metadata[key] == null) continue;
     const service = row(metadata[key]);

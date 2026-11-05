@@ -18,7 +18,7 @@ test('unverified legacy converted prices are readable but cannot be posted back'
   assert.equal(data.verified,false);
   assert.throws(()=>divisionFields(data,{'1':'1','2':'2','3':'2'},''));
 });
-test('split assignment preserves all rows and groups in server order without changing money or quantities', () => {
+test('split sends only row IDs and assigned parcels; the server owns money and quantities', () => {
   const data = normalizeStockDivision(raw), assignments={'1':'2','2':'1','3':'2'};
   assert.equal(divisionParts(data.items,assignments),2);
   assert.equal(divisionQuote(data,assignments),5);
@@ -27,7 +27,7 @@ test('split assignment preserves all rows and groups in server order without cha
   assert.equal(plan.encoding,'form');
   assert.equal(plan.fields.priceSemantics,'original-line-total');
   assert.equal(plan.fields.comment,'Please separate');
-  assert.deepEqual(JSON.parse(plan.fields.declarationItems).map(item=>[item.id,item.partNumber,item.quantity,item.price]),[['2',1,2,'20.00'],['1',2,2,'20.00'],['3',2,2,'20.00']]);
+  assert.deepEqual(JSON.parse(plan.fields.declarationItems),[{id:'2',partNumber:1},{id:'1',partNumber:2},{id:'3',partNumber:2}]);
 });
 test('at least two contiguous groups, known tariffs and every row are required before confirmation', () => {
   const data=normalizeStockDivision(raw);
@@ -43,6 +43,14 @@ test('service descriptions stay server-authored and zero prices remain available
   assert.equal(data.declaration,null);
   assert.equal(data.details.verification.description,'Server description');
   assert.throws(()=>normalizeStockServicePrices({currency:'USD',order_photo:'-1'}));
+});
+
+test('empty current and legacy service metadata retain tariffs; a non-empty list is malformed',()=>{
+  for (const serviceDetails of [{},[],undefined]) {
+    const prices=normalizeStockServicePrices({currency:'RON',order_photo:'0',order_verification:'4',serviceDetails});
+    assert.deepEqual(prices.details,{}); assert.equal(prices.photos,0); assert.equal(prices.verification,4);
+  }
+  assert.throws(()=>normalizeStockServicePrices({currency:'RON',serviceDetails:[{title:'Wrong shape'}]}));
 });
 
 test('fresh service eligibility targets one parcel rather than a paginated cached list',()=>{

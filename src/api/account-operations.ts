@@ -50,11 +50,11 @@ export function addressFormats(raw: unknown): AddressFormats {
   const countryRules = row.recipientCountryRules == null ? null : Object.fromEntries(Object.entries(record(row.recipientCountryRules)).map(([countryId, value]) => {
     const rule = record(value);
     if (!/^\d+$/.test(countryId) || typeof rule.postalCodeRequired !== 'boolean' || typeof rule.regionRequired !== 'boolean' || ![null, 'latin', 'cyrillic'].includes(rule.addressAlphabet as never) || rule.zipMask !== null && (typeof rule.zipMask !== 'string' || rule.zipMask.length > 80)) throw new ApiContractError('regulile adresei');
-    const labels: Partial<Record<RecipientField, string>> = {};
+    const labels: RecipientCountryRule['labels'] = {};
     for (const [key, value] of Object.entries(record(rule.labels))) {
-      if (!recipientFields.includes(key as RecipientField) || key === 'shipping_middle_name') continue;
+      if (key === 'shipping_middle_name' || key !== 'scans' && !recipientFields.includes(key as RecipientField)) continue;
       if (typeof value !== 'string' || value.length > 500) throw new ApiContractError('denumirile adresei');
-      const label = serverText(value).trim(); if (label) labels[key as RecipientField] = label;
+      const label = serverText(value).trim(); if (label) labels[key as RecipientField | 'scans'] = label;
     }
     return [countryId, { labels, zipMask: rule.zipMask === null ? null : serverText(rule.zipMask), addressAlphabet: rule.addressAlphabet as RecipientCountryRule['addressAlphabet'], postalCodeRequired: rule.postalCodeRequired, regionRequired: rule.regionRequired }];
   }));

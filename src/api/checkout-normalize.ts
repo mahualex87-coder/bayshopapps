@@ -1,4 +1,5 @@
 import type { CartItem } from './operations-normalize.ts';
+import type { PaymentBilling } from './payments-catalog.ts';
 import { ApiContractError } from './normalize.ts';
 import { packingAddresses, packingInsurance, packingLocal, packingText, type PackingLocal, type PackingAddress } from './packing-normalize.ts';
 import { normalizeCarrierLogo } from './carrier-assets.ts';
@@ -48,23 +49,23 @@ export function checkoutCarriers(raw: unknown): CheckoutCarrier[] {
   return array(row(raw).items).map(raw => { const item = row(raw); return { id: id(item.id), title: required(item.title), ...(item.flag === undefined ? {} : { logoUrl: normalizeCarrierLogo(item.flag) }), ...(item.forceWaitAllItems === undefined ? {} : { forceWaitAllItems: boolean(item.forceWaitAllItems) }), description: packingText(item.description), time: text(item.time), selfSend: boolean(item.self_send), localDelivery: boolean(item.local_delivery), insurance: boolean(item.insurance), consolidation: boolean(item.consolidation) }; });
 }
 export type CheckoutPayment = { key: string; title: string; description: string | null; availableCurrencies: string[] | null; hideBilling: boolean; percent: number; maxAmount: number; totalToPay: number; commission: number; fullOrderPrice: number };
-export type CheckoutPayments = { currency: string; lines: { key: string; amount: number }[]; methods: CheckoutPayment[] };
+export type CheckoutPayments = { currency: string; lines: { key: string; amount: number }[]; methods: CheckoutPayment[]; orderAcknowledgementVersion?: 1 };
 export function checkoutPayments(raw: unknown): CheckoutPayments {
   const data = row(raw), general = row(data.general); const currency = required(general.currencyCode);
   const lines = [['itemsPrice', 'itemsPrice'], ['localDelivery', 'localDelivery'], ['serviceComission', 'serviceCommission'], ['countCommission', 'countCommission'], ['fromBalance', 'fromBalance']].map(([field, key]) => ({ key, amount: number(general[field]) }));
-  const methods = Object.entries(row(data.paymentData)).map(([key, raw]) => {
+  const methods = Object.entries(Array.isArray(data.paymentData) && !data.paymentData.length ? {} : row(data.paymentData)).map(([key, raw]) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(key)) throw new ApiContractError('metoda de plată');
     const item = row(raw), amounts = row(item.amounts);
     return { key, title: required(item.name), description: packingText(item.description), availableCurrencies: item.availableCurrency === undefined ? null : array(item.availableCurrency).map(required), hideBilling: boolean(item.hide_billing), percent: number(item.percent), maxAmount: number(item.max_sum), totalToPay: number(amounts.totalToPay), commission: number(amounts.comission), fullOrderPrice: number(amounts.fullOrderPrice) };
   });
-  return { currency, lines, methods };
+  return { currency: currency.toUpperCase(), lines, methods, ...(data.orderAcknowledgementVersion === 1 ? { orderAcknowledgementVersion: 1 as const } : {}) };
 }
-export type CreatedOrder = { type: string; amount: number; currencyId: string; balance: number | null; orders: { id: string; uid: string | null }[] };
+export type CreatedOrder = { type: string; amount: number; currencyId: string | null; balance: number | null; orders: { id: string; uid: string | null; terminalCode?: string | null }[] };
 /** Creation confirms order IDs. It does not prove that an external payment ran. */
 export function checkoutCreated(raw: unknown): CreatedOrder {
   const envelope = row(raw);
   if (![false, 0, '0'].includes(envelope.error as never) || Number(envelope.code) !== 200 || envelope.message !== 'Ok') throw new ApiContractError('confirmarea comenzii');
-  const item = row(envelope.paymentParams); const orders = array(item.orders).map(raw => { const order = row(raw); return { id: id(order.id), uid: text(order.uid) }; });
+  const item = row(envelope.paymentParams); const orders = array(item.orders).map(raw => { const order = row(raw); return { id: id(order.id), uid: text(order.uid), ...(order.terminalKey == null ? {} : { terminalCode: id(order.terminalKey) }) }; });
   if (!orders.length || new Set(orders.map(item => item.id)).size !== orders.length) throw new ApiContractError('confirmarea comenzii');
   return { type: required(item.type), amount: number(item.amount), currencyId: id(item.currency), balance: item.balance == null ? null : number(item.balance), orders };
 }
@@ -82,11 +83,22 @@ export function checkoutItems(ids: string[], items: CartItem[]): CartItem[] {
 export function checkoutItemFingerprint(items: CartItem[]): string {
   return JSON.stringify(items.map(item => ({ id: item.id, title: item.title, quantity: item.quantity, price: item.price, shipping: item.shipping, color: item.color, size: item.size, comment: item.comment, url: item.url, currency: item.currency, shopId: item.shopId, storageId: item.storageId, isComplex: item.isComplex, status: item.status })));
 }
-export function checkoutPaymentIssue(method: CheckoutPayment, currency: string): string | null {
-  // OrderCreateController filters methods for this exact order currency, then
-  // removes availableCurrency from its legacy response. Keep that distinction.
-  if (method.availableCurrencies !== null && !method.availableCurrencies.some(code => code.toLowerCase() === currency.toLowerCase())) return 'commerce.paymentCurrencyUnavailable';
-  if (!method.hideBilling) return 'commerce.billingUnsupported';
-  if (method.maxAmount > 0 && method.totalToPay > method.maxAmount) return 'commerce.paymentLimitExceeded';
-  return null;
+export function orderBillingMissing(methodKey: string, billing: PaymentBilling | null | undefined): boolean {
+  if (!['platescro', 'apple-pay', 'google-pay'].includes(methodKey)) return false;
+  const fields = billing?.fields;
+  return billing?.isSet !== true || !fields ||
+    ![fields.address1, fields.city, fields.state, fields.email, fields.phone, fields.zip, fields.country].every(value => value?.trim());
+}
+
+export function checkoutPaymentIssue(method: CheckoutPayment, currency: string, quote?: CheckoutPayments): string | null {
+  if (method.availableCurrencies !== null && !method.availableCurrencies.some(code => code.toUpperCase() === currency.toUpperCase())) return 'commerce.paymentCurrencyUnavailable';
+  // OrderCreateController applies the ceiling BEFORE adding the processor fee.
+  if (method.maxAmount > 0 && Math.round((method.totalToPay - method.commission) * 100) > Math.round(method.maxAmount * 100)) return 'commerce.paymentLimitExceeded';
+  if (method.key === 'terminals' && quote?.orderAcknowledgementVersion !== 1) return 'commerce.paymentServerUpdate';
+  if (method.key === 'apple-pay' || method.key === 'google-pay') {
+    const card = quote?.methods.find(candidate => candidate.key === 'platescro');
+    if (!card || checkoutPaymentIssue(card, currency) || card.totalToPay !== method.totalToPay ||
+        card.commission !== method.commission || card.fullOrderPrice !== method.fullOrderPrice) return 'commerce.paymentUnsupported';
+  }
+  return ['balance', 'terminals', 'platescro', 'paypal', 'apple-pay', 'google-pay'].includes(method.key) ? null : 'commerce.paymentUnsupported';
 }
